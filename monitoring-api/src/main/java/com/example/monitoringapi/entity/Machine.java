@@ -1,0 +1,53 @@
+package com.example.monitoringapi.entity;
+
+import com.fasterxml.jackson.annotation.JsonManagedReference;
+import jakarta.persistence.*;
+import lombok.AllArgsConstructor;
+import lombok.Getter;
+import lombok.NoArgsConstructor;
+import lombok.Setter;
+
+import java.time.LocalDateTime;
+import java.util.List;
+
+@Entity
+@Table(name = "machine")
+@Getter
+@Setter
+@NoArgsConstructor
+@AllArgsConstructor
+public class Machine {
+
+    @Id
+    @GeneratedValue(strategy = GenerationType.IDENTITY)
+    private Long id;
+
+    @Column(name = "machine_id", nullable = false, unique = true)
+    private String machineId;
+
+    @Column(nullable = false)
+    private String hostname;
+
+    @Column
+    private String location;
+
+    @Column(nullable = false)
+    private String status;
+
+    @Column
+    private LocalDateTime lastSeen;
+
+    @Column
+    private LocalDateTime createdAt;
+
+    @OneToMany(mappedBy = "machine")
+    @JsonManagedReference
+    private List<HealthEvent> healthEvents;
+
+    @PrePersist
+    public void prePersist() {
+        if (createdAt == null) {
+            createdAt = LocalDateTime.now();
+        }
+    }
+}
