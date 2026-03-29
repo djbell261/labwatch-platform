@@ -6,7 +6,7 @@ The system ingests machine telemetry, publishes events through Kafka, processes 
 
 ---
 
-## 🚀 Features
+## Features
 
 * REST API for ingesting machine health metrics
 * Kafka-based event streaming between services
@@ -18,7 +18,7 @@ The system ingests machine telemetry, publishes events through Kafka, processes 
 
 ---
 
-## 🧠 Architecture
+## Architecture
 
 ```
 Client / Agent
@@ -34,9 +34,9 @@ Client / Agent
 
 ---
 
-## ⚙️ Services
+## Services
 
-### 🔹 monitoring-api
+### monitoring-api
 
 Responsible for:
 
@@ -45,7 +45,7 @@ Responsible for:
 * Persisting health events
 * Publishing events to Kafka
 
-### 🔹 alert-engine
+### alert-engine
 
 Responsible for:
 
@@ -57,7 +57,7 @@ Responsible for:
 
 ---
 
-## 🛠️ Tech Stack
+## Tech Stack
 
 * Java
 * Spring Boot
@@ -70,7 +70,7 @@ Responsible for:
 
 ---
 
-## 🔄 Example Workflow
+## Example Workflow
 
 1. A machine sends a CPU usage event to `monitoring-api`
 2. The event is stored and published to Kafka
@@ -80,7 +80,7 @@ Responsible for:
 
 ---
 
-## 📡 API Example
+##  API Example
 
 ### Create Health Event
 
@@ -106,9 +106,9 @@ Responsible for:
 
 ---
 
-## 📌 Project Status
+## Project Status
 
-### ✅ Completed
+### Completed
 
 * monitoring-api service
 * alert-engine service
@@ -117,7 +117,7 @@ Responsible for:
 * Deduplication logic
 * Alert resolution logic
 
-### 🚧 In Progress / Planned
+### In Progress / Planned
 
 * React dashboard (real-time alert visualization)
 * Python monitoring agent
@@ -126,7 +126,7 @@ Responsible for:
 
 ---
 
-## 💡 Why This Project Matters
+## Why This Project Matters
 
 This project demonstrates:
 
@@ -139,6 +139,6 @@ This project demonstrates:
 
 ---
 
-## 👨‍💻 Author
+## Author
 
 Derwin Bell
