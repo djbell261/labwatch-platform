@@ -25,14 +25,32 @@ public class HealthEventController {
     }
 
     @GetMapping
-    public List<HealthEvent> getAllHealthEvents() {
-        return healthEventRepository.findAll();
+    public List<HealthEventResponse> getAllEvents() {
+        return healthEventRepository.findAll()
+                .stream()
+                .map(this::toResponse)
+                .toList();
     }
 
+    private HealthEventResponse toResponse(HealthEvent event) {
+        return new HealthEventResponse(
+                event.getId(),
+                event.getEventId(),              // ✅ UUID (no .toString())
+                event.getMachine().getMachineId(),
+                event.getMachine().getHostname(),
+                event.getEventType(),
+                event.getMetricValue(),          // ✅ BigDecimal (no .doubleValue())
+                event.getStatus(),
+                event.getMessage(),
+                event.getCreatedAt()
+        );
+    }
     @GetMapping("/{id}")
-    public HealthEvent getEventById(@PathVariable Long id) {
-        return healthEventRepository.findById(id)
-                .orElseThrow(() -> new RuntimeException("Health event not found with id " + id));
+    public HealthEventResponse getEventById(@PathVariable Long id) {
+        HealthEvent event = healthEventRepository.findById(id)
+                .orElseThrow(() -> new RuntimeException("Health event not found"));
+
+        return toResponse(event);
     }
 
     @PostMapping

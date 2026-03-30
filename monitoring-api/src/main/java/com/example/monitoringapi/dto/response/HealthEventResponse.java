@@ -1,6 +1,7 @@
 package com.example.monitoringapi.dto.response;
 
 
+import lombok.AllArgsConstructor;
 import lombok.Getter;
 import lombok.Setter;
 
@@ -10,11 +11,11 @@ import java.util.UUID;
 
 @Getter
 @Setter
+@AllArgsConstructor
 public class HealthEventResponse {
 
     private Long id;
     private UUID eventId;
-    private Long machineId;
     private String machineIdentifier;
     private String hostname;
     private String eventType;
@@ -22,5 +23,6 @@ public class HealthEventResponse {
     private String status;
     private String message;
     private LocalDateTime createdAt;
+
 
 }

@@ -7,10 +7,10 @@ import lombok.Setter;
 
 import java.time.LocalDateTime;
 
-@NoArgsConstructor
-@AllArgsConstructor
-@Setter
 @Getter
+@Setter
+@AllArgsConstructor
+@NoArgsConstructor
 public class MachineResponse {
 
     private Long id;

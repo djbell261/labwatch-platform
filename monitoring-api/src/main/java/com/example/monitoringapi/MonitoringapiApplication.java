@@ -9,6 +9,7 @@ import org.springframework.kafka.annotation.EnableKafka;
 public class MonitoringapiApplication {
 
 	public static void main(String[] args) {
+
 		SpringApplication.run(MonitoringapiApplication.class, args);
 	}
 

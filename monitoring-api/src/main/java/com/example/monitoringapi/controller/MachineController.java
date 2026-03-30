@@ -1,10 +1,12 @@
 package com.example.monitoringapi.controller;
 
+import com.example.monitoringapi.dto.response.MachineResponse;
 import com.example.monitoringapi.entity.Machine;
 import com.example.monitoringapi.repository.MachineRepository;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
+import java.util.stream.Collectors;
 
 @RestController
 @RequestMapping("/api/machines")
@@ -17,37 +19,30 @@ public class MachineController {
     }
 
     @GetMapping
-    public List<Machine> getAllMachines() {
-        return machineRepository.findAll();
+    public List<MachineResponse> getAllMachines() {
+        return machineRepository.findAll()
+                .stream()
+                .map(this::toResponse)
+                .collect(Collectors.toList());
     }
 
     @GetMapping("/{id}")
-    public Machine getMachineById(@PathVariable Long id) {
-        return machineRepository.findById(id)
+    public MachineResponse getMachineById(@PathVariable Long id) {
+        Machine machine = machineRepository.findById(id)
                 .orElseThrow(() -> new RuntimeException("Machine not found with id " + id));
+
+        return toResponse(machine);
     }
 
-    @PostMapping
-    public Machine createMachine(@RequestBody Machine machine) {
-        return machineRepository.save(machine);
-    }
-
-    @PutMapping("/{id}")
-    public Machine updateMachine(@PathVariable Long id, @RequestBody Machine updatedMachine) {
-        return machineRepository.findById(id)
-                .map(machine -> {
-                    machine.setMachineId(updatedMachine.getMachineId());
-                    machine.setHostname(updatedMachine.getHostname());
-                    machine.setLocation(updatedMachine.getLocation());
-                    machine.setStatus(updatedMachine.getStatus());
-                    machine.setLastSeen(updatedMachine.getLastSeen());
-                    return machineRepository.save(machine);
-                })
-                .orElseThrow(() -> new RuntimeException("Machine not found with id " + id));
-    }
-
-    @DeleteMapping("/{id}")
-    public void deleteMachineById(@PathVariable Long id) {
-        machineRepository.deleteById(id);
+    private MachineResponse toResponse(Machine machine) {
+        return new MachineResponse(
+                machine.getId(),
+                machine.getMachineId(),
+                machine.getHostname(),
+                machine.getLocation(),
+                machine.getStatus(),
+                machine.getLastSeen(),
+                machine.getCreatedAt()
+        );
     }
 }

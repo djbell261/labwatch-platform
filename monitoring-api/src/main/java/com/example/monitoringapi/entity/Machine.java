@@ -1,6 +1,6 @@
 package com.example.monitoringapi.entity;
 
-import com.fasterxml.jackson.annotation.JsonManagedReference;
+import com.fasterxml.jackson.annotation.JsonIgnore;
 import jakarta.persistence.*;
 import lombok.AllArgsConstructor;
 import lombok.Getter;
@@ -22,6 +22,10 @@ public class Machine {
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
+    @JsonIgnore
+    @OneToMany(mappedBy = "machine")
+    private List<HealthEvent> healthEvents;
+
     @Column(name = "machine_id", nullable = false, unique = true)
     private String machineId;
 
@@ -40,9 +44,6 @@ public class Machine {
     @Column
     private LocalDateTime createdAt;
 
-    @OneToMany(mappedBy = "machine")
-    @JsonManagedReference
-    private List<HealthEvent> healthEvents;
 
     @PrePersist
     public void prePersist() {
