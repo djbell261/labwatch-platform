@@ -129,7 +129,7 @@ Create Health Event
 
 
 
-### This project demonstrates:
+## This project demonstrates:
 - Distributed system design
 - Event-driven architecture with Kafka
 - Microservice communication patterns
