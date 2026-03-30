@@ -60,17 +60,16 @@ public class HealthEventIngestionService {
     }
 
     private HealthEventResponse toResponse(HealthEvent savedEvent) {
-        HealthEventResponse response = new HealthEventResponse();
-        response.setId(savedEvent.getId());
-        response.setEventId(savedEvent.getEventId());
-        response.setMachineId(savedEvent.getMachine().getId());
-        response.setMachineIdentifier(savedEvent.getMachine().getMachineId());
-        response.setHostname(savedEvent.getMachine().getHostname());
-        response.setEventType(savedEvent.getEventType());
-        response.setMetricValue(savedEvent.getMetricValue());
-        response.setStatus(savedEvent.getStatus());
-        response.setMessage(savedEvent.getMessage());
-        response.setCreatedAt(savedEvent.getCreatedAt());
-        return response;
+        return new HealthEventResponse(
+                savedEvent.getId(),
+                savedEvent.getEventId(),
+                savedEvent.getMachine().getMachineId(),
+                savedEvent.getMachine().getHostname(),
+                savedEvent.getEventType(),
+                savedEvent.getMetricValue(),
+                savedEvent.getStatus(),
+                savedEvent.getMessage(),
+                savedEvent.getCreatedAt()
+        );
     }
 }
