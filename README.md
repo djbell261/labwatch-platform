@@ -126,8 +126,10 @@ Python-based monitoring agent
 Alert severity levels (INFO / WARNING / CRITICAL)
 Observability (metrics + logging)
 Cloud deployment (AWS)
-💡 Why This Project Matters
-This project demonstrates:
+
+
+
+### This project demonstrates:
 Distributed system design
 Event-driven architecture with Kafka
 Microservice communication patterns
