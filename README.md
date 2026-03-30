@@ -1,92 +1,95 @@
 # LabWatch Platform
 
-LabWatch Platform is a microservice-based monitoring and alerting system that simulates real-world infrastructure monitoring workflows using event-driven architecture.
+**LabWatch Platform** is a distributed, event-driven monitoring system designed to simulate real-world infrastructure alerting workflows.
 
-The system ingests machine telemetry, publishes events through Kafka, processes alert logic asynchronously, and manages alert lifecycle state in PostgreSQL.
-
----
-
-## Features
-
-* REST API for ingesting machine health metrics
-* Kafka-based event streaming between services
-* Asynchronous alert processing engine
-* Threshold-based alert detection (CPU, Memory, Disk)
-* Alert deduplication (prevents duplicate active alerts)
-* Alert lifecycle management (ACTIVE → RESOLVED)
-* PostgreSQL persistence for machines, events, and alerts
+It ingests machine telemetry, processes events asynchronously using Kafka, and manages alert lifecycle state using a microservice architecture.
 
 ---
 
-## Architecture
+## 🚀 Key Highlights
 
-```
+- Event-driven architecture using Kafka
+- Microservices built with Spring Boot
+- Real-time alert processing pipeline
+- Alert deduplication and lifecycle management
+- Dockerized system for consistent deployment
+- PostgreSQL-backed persistence layer
+
+---
+
+## 🧠 System Architecture
 Client / Agent
-        ↓
- monitoring-api
-        ↓
- Kafka (health-events topic)
-        ↓
- alert-engine
-        ↓
- PostgreSQL
-```
+↓
+monitoring-api (REST ingestion)
+↓
+Kafka (health-events topic)
+↓
+alert-engine (async processing)
+↓
+PostgreSQL (alerts + events)
+
 
 ---
+
+## ⚙️ Services
+
+### monitoring-api
+- Receives telemetry via REST (`POST /api/events`)
+- Validates and persists machine health events
+- Publishes events to Kafka topic (`health-events`)
+
+### alert-engine
+- Consumes Kafka events asynchronously
+- Applies threshold-based alert logic
+- Prevents duplicate ACTIVE alerts
+- Transitions alerts from ACTIVE → RESOLVED
+- Persists alerts in PostgreSQL
+
+---
+
+## 🔥 Core Features
+
+### Event-Driven Processing
+Decoupled services using Kafka to enable scalability and fault tolerance.
+
+### Alert Deduplication
+Prevents alert spam by ensuring only one ACTIVE alert exists per machine + alert type.
+
+### Alert Lifecycle Management
+Alerts automatically transition:
+ACTIVE → RESOLVED
+
+
+Each alert includes:
+- `createdAt`
+- `resolvedAt`
+
+### Threshold-Based Detection
+Supports CPU, Memory, and Disk thresholds.
+
+---
+
+## 🐳 Running the System (Docker)
+
+### Prerequisites
+- Docker Desktop
+
+### Run everything
+
+docker compose up --build
 
 ## Services
 
-### monitoring-api
+| Service        | URL                                            |
+| -------------- | ---------------------------------------------- |
+| monitoring-api | [http://localhost:8089](http://localhost:8089) |
+| alert-engine   | [http://localhost:8088](http://localhost:8088) |
 
-Responsible for:
+## API Usage
+Create Health Event
 
-* Receiving telemetry via REST endpoints
-* Validating incoming data
-* Persisting health events
-* Publishing events to Kafka
+### POST /api/events
 
-### alert-engine
-
-Responsible for:
-
-* Consuming Kafka events
-* Applying alert threshold logic
-* Preventing duplicate alerts
-* Resolving alerts when metrics normalize
-* Persisting alerts to PostgreSQL
-
----
-
-## Tech Stack
-
-* Java
-* Spring Boot
-* Spring Data JPA (Hibernate)
-* PostgreSQL
-* Apache Kafka
-* Maven
-* REST APIs
-* Postman
-
----
-
-## Example Workflow
-
-1. A machine sends a CPU usage event to `monitoring-api`
-2. The event is stored and published to Kafka
-3. `alert-engine` consumes the event
-4. If threshold is exceeded → ACTIVE alert is created
-5. If metric returns to normal → alert is RESOLVED
-
----
-
-##  API Example
-
-### Create Health Event
-
-`POST /api/events`
-
-```json
 {
   "machineIdentifier": "lab-pc-01",
   "hostname": "lab-pc-01",
@@ -96,49 +99,41 @@ Responsible for:
   "status": "WARNING",
   "message": "CPU usage exceeded threshold"
 }
-```
 
----
+### GET /api/alerts
 
-### Get Alerts
+## Example Flow
 
-`GET /api/alerts`
+Machine sends event → monitoring-api
+Event stored + published to Kafka
+alert-engine consumes event
+Alert created if threshold exceeded
+Alert resolved when metric normalizes
 
----
+## Tech Stack
 
-## Project Status
+Java
+Spring Boot
+Spring Data JPA (Hibernate)
+PostgreSQL
+Apache Kafka
+Docker + Docker Compose
+Maven
 
-### Completed
-
-* monitoring-api service
-* alert-engine service
-* Kafka integration
-* Alert creation + persistence
-* Deduplication logic
-* Alert resolution logic
-
-### In Progress / Planned
-
-* React dashboard (real-time alert visualization)
-* Python monitoring agent
-* Docker Compose setup (Kafka + PostgreSQL + services)
-* Advanced alert severity tiers
-
----
-
-## Why This Project Matters
-
+## Roadmap
+React dashboard for real-time alerts
+Python-based monitoring agent
+Alert severity levels (INFO / WARNING / CRITICAL)
+Observability (metrics + logging)
+Cloud deployment (AWS)
+💡 Why This Project Matters
 This project demonstrates:
-
-* Microservice architecture design
-* Event-driven systems using Kafka
-* Asynchronous backend processing
-* Clean API design with DTOs
-* Database modeling and persistence
-* Real-world alert lifecycle management
-
----
+Distributed system design
+Event-driven architecture with Kafka
+Microservice communication patterns
+Backend system scalability concepts
+Real-world alert lifecycle handling
+DevOps fundamentals with Docker
 
 ## Author
-
 Derwin Bell
