@@ -25,7 +25,7 @@ public class AlertProcessingService {
 
         String alertType;
         String severity;
-        String message;
+        String alertMessage;
         boolean thresholdExceeded;
 
         switch (eventType) {
@@ -33,21 +33,22 @@ public class AlertProcessingService {
                 alertType = "CPU";
                 thresholdExceeded = value > 90;
                 severity = "HIGH";
-                message = "CPU usage exceeded threshold";
+                alertMessage = "CPU usage exceeded threshold";
             }
             case "MEMORY" -> {
                 alertType = "MEMORY";
                 thresholdExceeded = value > 85;
                 severity = "HIGH";
-                message = "Memory usage exceeded threshold";
+                alertMessage = "Memory usage exceeded threshold";
             }
             case "DISK" -> {
                 alertType = "DISK";
                 thresholdExceeded = value > 95;
                 severity = "CRITICAL";
-                message = "Disk usage exceeded threshold";
+                alertMessage = "Disk usage exceeded threshold";
             }
             default -> {
+                System.out.println("Skipping unsupported event type: " + eventType);
                 return;
             }
         }
@@ -60,37 +61,88 @@ public class AlertProcessingService {
                 );
 
         if (thresholdExceeded) {
-            if (existingActiveAlert.isEmpty()) {
-                Alert alert = new Alert();
-                alert.setEventId(eventMessage.getEventId());
-                alert.setMachineId(eventMessage.getMachineId());
-                alert.setMachineIdentifier(eventMessage.getMachineIdentifier());
-                alert.setHostname(eventMessage.getHostname());
-                alert.setAlertType(alertType);
-                alert.setSeverity(severity);
-                alert.setMessage(message);
-                alert.setStatus("ACTIVE");
-                alertRepository.save(alert);
-            }
+            handleActiveAlertCreation(eventMessage, alertType, severity, alertMessage, existingActiveAlert);
         } else {
-            existingActiveAlert.ifPresent(alert -> {
-                alert.setStatus("RESOLVED");
-                alert.setResolvedAt(LocalDateTime.now());
-                alertRepository.save(alert);
-            });
+            handleAlertResolution(eventMessage, alertType, existingActiveAlert);
         }
+    }
+
+    private void handleActiveAlertCreation(
+            HealthEventMessage eventMessage,
+            String alertType,
+            String severity,
+            String alertMessage,
+            Optional<Alert> existingActiveAlert
+    ) {
+        if (existingActiveAlert.isPresent()) {
+            System.out.println(
+                    "Duplicate alert skipped for machine " +
+                            eventMessage.getMachineIdentifier() +
+                            " and alert type " + alertType
+            );
+            return;
+        }
+
+        Alert alert = new Alert();
+        alert.setEventId(eventMessage.getEventId());
+        alert.setMachineId(eventMessage.getMachineId());
+        alert.setMachineIdentifier(eventMessage.getMachineIdentifier());
+        alert.setHostname(eventMessage.getHostname());
+        alert.setAlertType(alertType);
+        alert.setSeverity(severity);
+        alert.setMessage(alertMessage);
+        alert.setStatus("ACTIVE");
+        alert.setCreatedAt(LocalDateTime.now());
+
+        alertRepository.save(alert);
+
+        System.out.println(
+                "Created ACTIVE alert for machine " +
+                        eventMessage.getMachineIdentifier() +
+                        " and alert type " + alertType
+        );
+    }
+
+    private void handleAlertResolution(
+            HealthEventMessage eventMessage,
+            String alertType,
+            Optional<Alert> existingActiveAlert
+    ) {
+        if (existingActiveAlert.isEmpty()) {
+            System.out.println(
+                    "No ACTIVE alert to resolve for machine " +
+                            eventMessage.getMachineIdentifier() +
+                            " and alert type " + alertType
+            );
+            return;
+        }
+
+        Alert alert = existingActiveAlert.get();
+        alert.setStatus("RESOLVED");
+        alert.setResolvedAt(LocalDateTime.now());
+
+        alertRepository.save(alert);
+
+        System.out.println(
+                "Resolved alert for machine " +
+                        eventMessage.getMachineIdentifier() +
+                        " and alert type " + alertType
+        );
     }
 
     private void validate(HealthEventMessage eventMessage) {
         if (eventMessage == null) {
             throw new RuntimeException("Health event message cannot be null");
         }
+
         if (eventMessage.getMachineId() == null) {
             throw new RuntimeException("Machine ID is required");
         }
+
         if (eventMessage.getMetricValue() == null) {
             throw new RuntimeException("Metric value is required");
         }
+
         if (eventMessage.getEventType() == null || eventMessage.getEventType().isBlank()) {
             throw new RuntimeException("Event type is required");
         }
