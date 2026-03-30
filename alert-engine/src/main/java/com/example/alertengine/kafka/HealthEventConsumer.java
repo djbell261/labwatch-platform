@@ -5,7 +5,6 @@ package com.example.alertengine.kafka;
 import com.example.alertengine.dto.HealthEventMessage;
 import com.example.alertengine.service.AlertProcessingService;
 import org.springframework.kafka.annotation.KafkaListener;
-import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
 
 @Component
