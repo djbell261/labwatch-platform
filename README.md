@@ -6,7 +6,7 @@ It ingests machine telemetry, processes events asynchronously using Kafka, and m
 
 ---
 
-## 🚀 Key Highlights
+## Key Highlights
 
 - Event-driven architecture using Kafka
 - Microservices built with Spring Boot
@@ -17,7 +17,7 @@ It ingests machine telemetry, processes events asynchronously using Kafka, and m
 
 ---
 
-## 🧠 System Architecture
+## System Architecture
 Client / Agent
 ↓
 monitoring-api (REST ingestion)
@@ -31,7 +31,7 @@ PostgreSQL (alerts + events)
 
 ---
 
-## ⚙️ Services
+## Services
 
 ### monitoring-api
 - Receives telemetry via REST (`POST /api/events`)
@@ -47,7 +47,7 @@ PostgreSQL (alerts + events)
 
 ---
 
-## 🔥 Core Features
+## Core Features
 
 ### Event-Driven Processing
 Decoupled services using Kafka to enable scalability and fault tolerance.
@@ -69,7 +69,7 @@ Supports CPU, Memory, and Disk thresholds.
 
 ---
 
-## 🐳 Running the System (Docker)
+## Running the System (Docker)
 
 ### Prerequisites
 - Docker Desktop
