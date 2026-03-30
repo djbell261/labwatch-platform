@@ -104,38 +104,38 @@ Create Health Event
 
 ## Example Flow
 
-Machine sends event → monitoring-api
-Event stored + published to Kafka
-alert-engine consumes event
-Alert created if threshold exceeded
-Alert resolved when metric normalizes
+- Machine sends event → monitoring-api
+- Event stored + published to Kafka
+- alert-engine consumes event
+- Alert created if threshold exceeded
+- Alert resolved when metric normalizes
 
 ## Tech Stack
 
-Java
-Spring Boot
-Spring Data JPA (Hibernate)
-PostgreSQL
-Apache Kafka
-Docker + Docker Compose
-Maven
+- Java
+- Spring Boot
+- Spring Data JPA (Hibernate)
+- PostgreSQL
+- Apache Kafka
+- Docker + Docker Compose
+- Maven
 
 ## Roadmap
-React dashboard for real-time alerts
-Python-based monitoring agent
-Alert severity levels (INFO / WARNING / CRITICAL)
-Observability (metrics + logging)
-Cloud deployment (AWS)
+- React dashboard for real-time alerts
+- Python-based monitoring agent
+- Alert severity levels (INFO / WARNING / CRITICAL)
+- Observability (metrics + logging)
+- Cloud deployment (AWS)
 
 
 
 ### This project demonstrates:
-Distributed system design
-Event-driven architecture with Kafka
-Microservice communication patterns
-Backend system scalability concepts
-Real-world alert lifecycle handling
-DevOps fundamentals with Docker
+- Distributed system design
+- Event-driven architecture with Kafka
+- Microservice communication patterns
+- Backend system scalability concepts
+- Real-world alert lifecycle handling
+- DevOps fundamentals with Docker
 
 ## Author
 Derwin Bell
