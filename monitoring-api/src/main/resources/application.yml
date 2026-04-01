@@ -1,14 +1,14 @@
 server:
-  port: ${SERVER_PORT:8089}
+  port: 8089
 
 spring:
   application:
     name: monitoring-api
 
   datasource:
-    url: ${SPRING_DATASOURCE_URL:jdbc:postgresql://localhost:5433/labwatch}
-    username: ${SPRING_DATASOURCE_USERNAME:postgres}
-    password: ${SPRING_DATASOURCE_PASSWORD:Noah2511}
+    url: jdbc:postgresql://localhost:5433/labwatch
+    username: postgres
+    password: Noah2511
     driver-class-name: org.postgresql.Driver
 
   jpa:
@@ -18,12 +18,18 @@ spring:
     properties:
       hibernate:
         format_sql: true
+        dialect: org.hibernate.dialect.PostgreSQLDialect
 
   kafka:
-    bootstrap-servers: ${SPRING_KAFKA_BOOTSTRAP_SERVERS:localhost:9092}
+    bootstrap-servers: localhost:9092
     producer:
       key-serializer: org.apache.kafka.common.serialization.StringSerializer
       value-serializer: org.springframework.kafka.support.serializer.JsonSerializer
+
+logging:
+  level:
+    root: INFO
+    org.springframework: INFO
 
 app:
   kafka:
