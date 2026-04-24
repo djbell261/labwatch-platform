@@ -44,8 +44,39 @@ function Dashboard() {
   const [alertsError, setAlertsError] = useState("");
   const [socketStatus, setSocketStatus] = useState("connecting");
 
+  const refreshAlerts = async (isMountedRef) => {
+    setAlertsLoading(true);
+
+    try {
+      const alertsResponse = await getAlerts();
+
+      if (!isMountedRef.current) {
+        return;
+      }
+
+      setAlerts(alertsResponse);
+      setAlertsError("");
+    } catch (error) {
+      if (!isMountedRef.current) {
+        return;
+      }
+
+      const message =
+        error?.response?.data?.message ||
+        error?.message ||
+        "Unable to load alert data.";
+
+      setAlertsError("Alert refresh failed. Please verify the alert engine is running.");
+      console.error(message);
+    } finally {
+      if (isMountedRef.current) {
+        setAlertsLoading(false);
+      }
+    }
+  };
+
   useEffect(() => {
-    let isMounted = true;
+    const isMountedRef = { current: true };
 
     const loadInitialTelemetry = async () => {
       setTelemetryLoading(true);
@@ -53,7 +84,7 @@ function Dashboard() {
       try {
         const telemetryResponse = await getTelemetrySnapshots();
 
-        if (!isMounted) {
+        if (!isMountedRef.current) {
           return;
         }
 
@@ -62,7 +93,7 @@ function Dashboard() {
         setLatestTelemetry(getLatestSnapshot(recentTelemetry));
         setTelemetryError("");
       } catch (error) {
-        if (!isMounted) {
+        if (!isMountedRef.current) {
           return;
         }
 
@@ -75,17 +106,18 @@ function Dashboard() {
         setTelemetryError("Telemetry refresh failed. Please verify the monitoring API is running.");
         console.error(message);
       } finally {
-        if (isMounted) {
+        if (isMountedRef.current) {
           setTelemetryLoading(false);
         }
       }
     };
 
     loadInitialTelemetry();
+    refreshAlerts(isMountedRef);
 
     const telemetrySocket = createTelemetrySocket({
       onConnect: () => {
-        if (!isMounted) {
+        if (!isMountedRef.current) {
           return;
         }
 
@@ -93,21 +125,21 @@ function Dashboard() {
         setTelemetryError("");
       },
       onDisconnect: () => {
-        if (!isMounted) {
+        if (!isMountedRef.current) {
           return;
         }
 
         setSocketStatus("reconnecting");
       },
       onError: () => {
-        if (!isMounted) {
+        if (!isMountedRef.current) {
           return;
         }
 
         setSocketStatus("reconnecting");
       },
       onTelemetry: (snapshot) => {
-        if (!isMounted) {
+        if (!isMountedRef.current) {
           return;
         }
 
@@ -116,56 +148,24 @@ function Dashboard() {
           setLatestTelemetry(nextHistory[0] || null);
           return nextHistory;
         });
+        refreshAlerts(isMountedRef);
       },
     });
 
     telemetrySocket.connect();
 
     return () => {
-      isMounted = false;
+      isMountedRef.current = false;
       telemetrySocket.disconnect();
     };
   }, []);
 
   useEffect(() => {
-    let isMounted = true;
-
-    const refreshAlerts = async () => {
-      setAlertsLoading(true);
-
-      try {
-        const alertsResponse = await getAlerts();
-
-        if (!isMounted) {
-          return;
-        }
-
-        setAlerts(alertsResponse);
-        setAlertsError("");
-      } catch (error) {
-        if (!isMounted) {
-          return;
-        }
-
-        const message =
-          error?.response?.data?.message ||
-          error?.message ||
-          "Unable to load alert data.";
-
-        setAlertsError("Alert refresh failed. Please verify the alert engine is running.");
-        console.error(message);
-      } finally {
-        if (isMounted) {
-          setAlertsLoading(false);
-        }
-      }
-    };
-
-    refreshAlerts();
-    const intervalId = window.setInterval(refreshAlerts, 15000);
+    const isMountedRef = { current: true };
+    const intervalId = window.setInterval(() => refreshAlerts(isMountedRef), 5000);
 
     return () => {
-      isMounted = false;
+      isMountedRef.current = false;
       window.clearInterval(intervalId);
     };
   }, []);

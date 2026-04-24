@@ -1,118 +1,54 @@
 import {
   CartesianGrid,
+  LabelList,
   Legend,
   Line,
   LineChart,
   ReferenceDot,
   ResponsiveContainer,
+  Scatter,
   Tooltip,
   XAxis,
   YAxis,
 } from "recharts";
+import {
+  buildAlertMarkers,
+  buildAnomalyMarkers,
+  buildChartData,
+  formatAlertTime,
+  metricMeta,
+} from "./telemetryChartUtils";
 
-const metricMeta = {
-  CPU: { key: "cpuUsage", color: "#38bdf8", label: "CPU" },
-  MEMORY: { key: "memoryUsage", color: "#f59e0b", label: "Memory" },
-  DISK: { key: "diskUsage", color: "#34d399", label: "Disk" },
-};
+function getAlertMarkerStyle(marker) {
+  const isActive = marker.status === "ACTIVE";
+  const isHighSeverity = marker.severity === "HIGH" || marker.severity === "CRITICAL";
 
-function formatChartTime(value) {
-  if (!value) {
-    return "--";
-  }
-
-  const parsed = new Date(value);
-  if (Number.isNaN(parsed.getTime())) {
-    return value;
-  }
-
-  return parsed.toLocaleTimeString([], {
-    hour: "2-digit",
-    minute: "2-digit",
-    second: "2-digit",
-  });
+  return {
+    fill: isActive ? "#ef4444" : marker.color,
+    stroke: "#ffffff",
+    strokeWidth: isHighSeverity ? 2.5 : 1.5,
+    r: isActive ? 11 : 6.5,
+    fillOpacity: isActive ? 0.98 : 0.35,
+  };
 }
 
-function formatAlertTime(value) {
-  if (!value) {
-    return "Unknown time";
-  }
-
-  const parsed = new Date(value);
-  if (Number.isNaN(parsed.getTime())) {
-    return value;
-  }
-
-  return parsed.toLocaleString();
-}
-
-function buildChartData(telemetryHistory) {
-  if (!Array.isArray(telemetryHistory)) {
-    return [];
-  }
-
-  return [...telemetryHistory]
-    .sort((left, right) => {
-      const leftTime = new Date(left.timestamp || left.createdAt || 0).getTime();
-      const rightTime = new Date(right.timestamp || right.createdAt || 0).getTime();
-      return leftTime - rightTime;
-    })
-    .map((snapshot) => ({
-      id: snapshot.snapshotId || snapshot.id,
-      timestamp: snapshot.timestamp || snapshot.createdAt,
-      time: formatChartTime(snapshot.timestamp || snapshot.createdAt),
-      cpuUsage: Number(snapshot.cpuUsage ?? 0),
-      memoryUsage: Number(snapshot.memoryUsage ?? 0),
-      diskUsage: Number(snapshot.diskUsage ?? 0),
-    }));
-}
-
-function buildAlertMarkers(chartData, alerts) {
-  if (!Array.isArray(alerts) || alerts.length === 0 || chartData.length === 0) {
-    return [];
-  }
-
-  const recentChartPoints = chartData.slice(-12);
-
-  return alerts
-    .filter((alert) => alert?.createdAt && metricMeta[alert.alertType])
-    .slice()
-    .sort((left, right) => new Date(left.createdAt).getTime() - new Date(right.createdAt).getTime())
-    .slice(-8)
-    .map((alert) => {
-      const metric = metricMeta[alert.alertType];
-      const alertTimestamp = new Date(alert.createdAt).getTime();
-      const closestPoint = recentChartPoints.reduce((closest, point) => {
-        if (!closest) {
-          return point;
-        }
-
-        const closestDiff = Math.abs(new Date(closest.timestamp).getTime() - alertTimestamp);
-        const pointDiff = Math.abs(new Date(point.timestamp).getTime() - alertTimestamp);
-        return pointDiff < closestDiff ? point : closest;
-      }, null);
-
-      if (!closestPoint) {
-        return null;
-      }
-
-      return {
-        id: alert.id || `${alert.alertType}-${alert.createdAt}`,
-        label: alert.alertType,
-        severity: alert.severity || "UNKNOWN",
-        status: alert.status || "UNKNOWN",
-        x: closestPoint.time,
-        y: closestPoint[metric.key],
-        color: metric.color,
-      };
-    })
-    .filter(Boolean);
+function getAnomalyMarkerStyle(marker) {
+  return {
+    fill: "#a78bfa",
+    stroke: "#ffffff",
+    strokeWidth: 1.5,
+    r: 6,
+    fillOpacity: 0.85,
+  };
 }
 
 function CustomTooltip({ active, payload, label }) {
   if (!active || !payload?.length) {
     return null;
   }
+
+  const linePayload = payload.filter((entry) => entry.dataKey);
+  const markerPayload = payload.find((entry) => entry.payload?.type === "alert" || entry.payload?.type === "anomaly");
 
   return (
     <div
@@ -121,11 +57,13 @@ function CustomTooltip({ active, payload, label }) {
         border: "1px solid rgba(148, 163, 184, 0.2)",
         borderRadius: "14px",
         color: "#ffffff",
+        maxWidth: "320px",
         padding: "12px 14px",
       }}
     >
       <div style={{ color: "#e2e8f0", fontWeight: 700, marginBottom: "8px" }}>{label}</div>
-      {payload.map((entry) => (
+
+      {linePayload.map((entry) => (
         <div
           key={entry.dataKey}
           style={{
@@ -150,6 +88,46 @@ function CustomTooltip({ active, payload, label }) {
           </span>
         </div>
       ))}
+
+      {markerPayload?.payload?.type === "alert" ? (
+        <div
+          style={{
+            borderTop: "1px solid rgba(148, 163, 184, 0.16)",
+            marginTop: "10px",
+            paddingTop: "10px",
+          }}
+        >
+          <div style={{ color: markerPayload.payload.color, fontWeight: 700, marginBottom: "6px" }}>
+            Alert Event
+          </div>
+          <div style={{ color: "#e2e8f0" }}>Type: {markerPayload.payload.metricType}</div>
+          <div style={{ color: "#e2e8f0" }}>Severity: {markerPayload.payload.severity}</div>
+          <div style={{ color: "#e2e8f0" }}>Status: {markerPayload.payload.status}</div>
+          <div style={{ color: "#94a3b8" }}>Created: {formatAlertTime(markerPayload.payload.createdAt)}</div>
+          <div style={{ color: "#cbd5e1", marginTop: "6px" }}>{markerPayload.payload.message}</div>
+        </div>
+      ) : null}
+
+      {markerPayload?.payload?.type === "anomaly" ? (
+        <div
+          style={{
+            borderTop: "1px solid rgba(148, 163, 184, 0.16)",
+            marginTop: "10px",
+            paddingTop: "10px",
+          }}
+        >
+          <div style={{ color: "#c4b5fd", fontWeight: 700, marginBottom: "6px" }}>
+            AI Anomaly Marker
+          </div>
+          <div style={{ color: "#e2e8f0" }}>Metric: {markerPayload.payload.metricType}</div>
+          <div style={{ color: "#e2e8f0" }}>Severity: {markerPayload.payload.severity}</div>
+          <div style={{ color: "#e2e8f0" }}>Score: {markerPayload.payload.score ?? "--"}</div>
+          <div style={{ color: "#94a3b8" }}>Timestamp: {formatAlertTime(markerPayload.payload.timestamp)}</div>
+          <div style={{ color: "#cbd5e1", marginTop: "6px" }}>
+            {markerPayload.payload.explanation}
+          </div>
+        </div>
+      ) : null}
     </div>
   );
 }
@@ -227,9 +205,33 @@ function AlertEventsStrip({ alerts }) {
   );
 }
 
-function TelemetryTrendChart({ telemetryHistory, alerts }) {
+function renderAlertMarker(marker) {
+  const style = getAlertMarkerStyle(marker);
+
+  return (
+    <ReferenceDot
+      key={marker.id}
+      x={marker.x}
+      y={marker.y}
+      r={style.r}
+      fill={style.fill}
+      fillOpacity={style.fillOpacity}
+      stroke={style.stroke}
+      strokeWidth={style.strokeWidth}
+      ifOverflow="visible"
+      isFront
+    />
+  );
+}
+
+function TelemetryTrendChart({ telemetryHistory, alerts, anomalies = [] }) {
   const chartData = buildChartData(telemetryHistory);
   const alertMarkers = buildAlertMarkers(chartData, alerts);
+  const anomalyMarkers = buildAnomalyMarkers(chartData, anomalies);
+  const totalAlerts = Array.isArray(alerts) ? alerts.length : 0;
+  const visibleAlerts = Array.isArray(alerts)
+    ? alerts.filter((alert) => alert?.createdAt && metricMeta[alert.alertType]).length
+    : 0;
 
   return (
     <section
@@ -274,7 +276,69 @@ function TelemetryTrendChart({ telemetryHistory, alerts }) {
             padding: "10px 14px",
           }}
         >
-          {chartData.length} points
+          {chartData.length} points · {alertMarkers.length} alert markers
+        </div>
+      </div>
+
+      <div
+        style={{
+          color: "#94a3b8",
+          fontSize: "0.92rem",
+          marginBottom: "12px",
+        }}
+      >
+        total alerts received: {totalAlerts} · visible alerts: {visibleAlerts} · alert markers:{" "}
+        {alertMarkers.length}
+      </div>
+
+      <div
+        style={{
+          alignItems: "center",
+          color: "#cbd5e1",
+          display: "flex",
+          flexWrap: "wrap",
+          gap: "16px",
+          marginBottom: "14px",
+        }}
+      >
+        <div
+          style={{
+            alignItems: "center",
+            display: "flex",
+            gap: "8px",
+          }}
+        >
+          <span
+            style={{
+              background: "#ef4444",
+              border: "2px solid #ffffff",
+              borderRadius: "999px",
+              display: "inline-block",
+              height: "14px",
+              width: "14px",
+            }}
+          />
+          <span>Red marker = active alert</span>
+        </div>
+
+        <div
+          style={{
+            alignItems: "center",
+            display: "flex",
+            gap: "8px",
+          }}
+        >
+          <span
+            style={{
+              background: "rgba(148, 163, 184, 0.45)",
+              border: "2px solid #ffffff",
+              borderRadius: "999px",
+              display: "inline-block",
+              height: "12px",
+              width: "12px",
+            }}
+          />
+          <span>Muted marker = resolved alert</span>
         </div>
       </div>
 
@@ -355,18 +419,37 @@ function TelemetryTrendChart({ telemetryHistory, alerts }) {
                   dot={false}
                   activeDot={{ r: 5 }}
                 />
-                {alertMarkers.map((marker) => (
-                  <ReferenceDot
-                    key={marker.id}
-                    x={marker.x}
-                    y={marker.y}
-                    r={6}
-                    fill={marker.color}
-                    stroke="#ffffff"
-                    strokeWidth={1.5}
-                    ifOverflow="visible"
-                  />
-                ))}
+
+                {alertMarkers.map(renderAlertMarker)}
+
+                {anomalyMarkers.length > 0 ? (
+                  <Scatter
+                    data={anomalyMarkers}
+                    dataKey="y"
+                    fill="#a78bfa"
+                    name="AI Anomalies"
+                  >
+                    <LabelList dataKey="metricType" position="top" fill="#c4b5fd" fontSize={11} />
+                  </Scatter>
+                ) : null}
+
+                {anomalyMarkers.map((marker) => {
+                  const style = getAnomalyMarkerStyle(marker);
+                  return (
+                    <ReferenceDot
+                      key={marker.id}
+                      x={marker.x}
+                      y={marker.y}
+                      r={style.r}
+                      fill={style.fill}
+                      fillOpacity={style.fillOpacity}
+                      stroke={style.stroke}
+                      strokeWidth={style.strokeWidth}
+                      ifOverflow="visible"
+                      isFront
+                    />
+                  );
+                })}
               </LineChart>
             </ResponsiveContainer>
           </div>
