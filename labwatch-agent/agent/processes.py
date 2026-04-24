@@ -28,8 +28,8 @@ def collect_top_processes(limit: int) -> list[ProcessMetric]:
             processes.append(
                 ProcessMetric(
                     processName=info.get("name") or "unknown",
-                    cpuPercent=round(cpu_percent, 2),
-                    memoryPercent=round(memory_percent, 2),
+                    cpuPercent=min(round(cpu_percent, 2), 100.0),
+                    memoryPercent=min(round(memory_percent, 2), 100.0),
                 )
             )
         except (psutil.NoSuchProcess, psutil.AccessDenied, psutil.ZombieProcess):
