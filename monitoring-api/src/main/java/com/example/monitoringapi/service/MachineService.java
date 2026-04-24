@@ -1,6 +1,7 @@
 package com.example.monitoringapi.service;
 
 import com.example.monitoringapi.dto.request.CreateHealthEventRequest;
+import com.example.monitoringapi.dto.request.TelemetrySnapshotRequest;
 import com.example.monitoringapi.entity.Machine;
 import com.example.monitoringapi.repository.MachineRepository;
 import org.springframework.stereotype.Service;
@@ -22,6 +23,12 @@ public class MachineService {
                 .orElseGet(() -> createMachine(request));
     }
 
+    public Machine getOrCreateMachine(TelemetrySnapshotRequest request) {
+        return machineRepository.findByMachineId(request.getMachineIdentifier())
+                .map(existing -> updateMachineMetadata(existing, request))
+                .orElseGet(() -> createMachine(request));
+    }
+
     private Machine updateMachineMetadata(Machine machine, CreateHealthEventRequest request) {
         machine.setHostname(request.getHostname());
         machine.setLocation(request.getLocation());
@@ -37,6 +44,30 @@ public class MachineService {
         machine.setLocation(request.getLocation());
         machine.setStatus("ONLINE");
         machine.setLastSeen(LocalDateTime.now());
+        return machineRepository.save(machine);
+    }
+
+    private Machine updateMachineMetadata(Machine machine, TelemetrySnapshotRequest request) {
+        machine.setHostname(request.getHostname());
+        machine.setOsType(request.getOsType());
+        machine.setOsVersion(request.getOsVersion());
+        machine.setLastUptimeSeconds(request.getUptimeSeconds());
+        machine.setLastTelemetrySource(request.getSource());
+        machine.setStatus("ONLINE");
+        machine.setLastSeen(request.getTimestamp());
+        return machineRepository.save(machine);
+    }
+
+    private Machine createMachine(TelemetrySnapshotRequest request) {
+        Machine machine = new Machine();
+        machine.setMachineId(request.getMachineIdentifier());
+        machine.setHostname(request.getHostname());
+        machine.setOsType(request.getOsType());
+        machine.setOsVersion(request.getOsVersion());
+        machine.setLastUptimeSeconds(request.getUptimeSeconds());
+        machine.setLastTelemetrySource(request.getSource());
+        machine.setStatus("ONLINE");
+        machine.setLastSeen(request.getTimestamp());
         return machineRepository.save(machine);
     }
 }
