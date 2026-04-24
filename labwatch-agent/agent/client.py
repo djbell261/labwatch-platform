@@ -26,7 +26,7 @@ class LabWatchApiClient:
 
     def send_snapshot(self, snapshot: TelemetrySnapshot) -> None:
         endpoint = f"{self.api_url}/api/v1/telemetry/snapshots"
-
+        logger.info("payload", extra={"data": snapshot.to_dict()})
         for attempt in range(1, self.max_retries + 2):
             logger.info(
                 "telemetry request sent",
