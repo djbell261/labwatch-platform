@@ -5,11 +5,14 @@ import com.example.alertengine.entity.Alert;
 import com.example.alertengine.repository.AlertRepository;
 import org.springframework.stereotype.Service;
 
+import java.time.Duration;
 import java.time.LocalDateTime;
 import java.util.Optional;
 
 @Service
 public class AlertProcessingService {
+
+    private static final long MIN_ACTIVE_DURATION_SECONDS = 60;
 
     private final AlertRepository alertRepository;
 
@@ -31,19 +34,19 @@ public class AlertProcessingService {
         switch (eventType) {
             case "CPU" -> {
                 alertType = "CPU";
-                thresholdExceeded = value > 90;
+                thresholdExceeded = value > 25;
                 severity = "HIGH";
                 alertMessage = "CPU usage exceeded threshold";
             }
             case "MEMORY" -> {
                 alertType = "MEMORY";
-                thresholdExceeded = value > 85;
+                thresholdExceeded = value > 75;
                 severity = "HIGH";
                 alertMessage = "Memory usage exceeded threshold";
             }
             case "DISK" -> {
                 alertType = "DISK";
-                thresholdExceeded = value > 95;
+                thresholdExceeded = value > 10;
                 severity = "CRITICAL";
                 alertMessage = "Disk usage exceeded threshold";
             }
@@ -53,12 +56,11 @@ public class AlertProcessingService {
             }
         }
 
-        Optional<Alert> existingActiveAlert =
-                alertRepository.findByMachineIdAndAlertTypeAndStatus(
-                        eventMessage.getMachineId(),
-                        alertType,
-                        "ACTIVE"
-                );
+        Optional<Alert> existingActiveAlert = alertRepository.findByMachineIdAndAlertTypeAndStatus(
+                eventMessage.getMachineId(),
+                alertType,
+                "ACTIVE"
+        );
 
         if (thresholdExceeded) {
             handleActiveAlertCreation(eventMessage, alertType, severity, alertMessage, existingActiveAlert);
@@ -118,8 +120,23 @@ public class AlertProcessingService {
         }
 
         Alert alert = existingActiveAlert.get();
+        LocalDateTime now = LocalDateTime.now();
+        long activeDurationSeconds = Duration.between(alert.getCreatedAt(), now).getSeconds();
+
+        if (activeDurationSeconds < MIN_ACTIVE_DURATION_SECONDS) {
+            System.out.println(
+                    "Resolution delayed for machine " +
+                            eventMessage.getMachineIdentifier() +
+                            " and alert type " + alertType +
+                            " because ACTIVE duration is only " +
+                            activeDurationSeconds +
+                            " seconds"
+            );
+            return;
+        }
+
         alert.setStatus("RESOLVED");
-        alert.setResolvedAt(LocalDateTime.now());
+        alert.setResolvedAt(now);
 
         alertRepository.save(alert);
 
