@@ -35,6 +35,18 @@ public class Machine {
     @Column
     private String location;
 
+    @Column(name = "os_type")
+    private String osType;
+
+    @Column(name = "os_version")
+    private String osVersion;
+
+    @Column(name = "last_uptime_seconds")
+    private Long lastUptimeSeconds;
+
+    @Column(name = "last_telemetry_source")
+    private String lastTelemetrySource;
+
     @Column(nullable = false)
     private String status;
 
