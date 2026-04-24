@@ -16,6 +16,7 @@ import com.example.monitoringapi.exception.ResourceNotFoundException;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import org.springframework.messaging.simp.SimpMessagingTemplate;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Sort;
 import org.springframework.stereotype.Service;
@@ -39,19 +40,22 @@ public class TelemetrySnapshotIngestionService {
     private final HealthEventRepository healthEventRepository;
     private final HealthEventProducer healthEventProducer;
     private final ObjectMapper objectMapper;
+    private final SimpMessagingTemplate messagingTemplate;
 
     public TelemetrySnapshotIngestionService(
             MachineService machineService,
             TelemetrySnapshotRepository telemetrySnapshotRepository,
             HealthEventRepository healthEventRepository,
             HealthEventProducer healthEventProducer,
-            ObjectMapper objectMapper
+            ObjectMapper objectMapper,
+            SimpMessagingTemplate messagingTemplate
     ) {
         this.machineService = machineService;
         this.telemetrySnapshotRepository = telemetrySnapshotRepository;
         this.healthEventRepository = healthEventRepository;
         this.healthEventProducer = healthEventProducer;
         this.objectMapper = objectMapper;
+        this.messagingTemplate = messagingTemplate;
     }
 
     @Transactional
@@ -73,8 +77,10 @@ public class TelemetrySnapshotIngestionService {
 
         TelemetrySnapshot savedSnapshot = telemetrySnapshotRepository.save(snapshot);
         List<HealthEvent> normalizedEvents = createNormalizedEvents(machine, request);
+        TelemetrySnapshotDetailResponse detailResponse = toDetailResponse(savedSnapshot);
 
         normalizedEvents.forEach(event -> healthEventProducer.sendEvent(toMessage(event)));
+        messagingTemplate.convertAndSend("/topic/telemetry", detailResponse);
 
         return new TelemetrySnapshotResponse(
                 savedSnapshot.getId(),

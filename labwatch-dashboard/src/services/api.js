@@ -6,7 +6,7 @@ const monitoringApi = axios.create({
 });
 
 const alertsApi = axios.create({
-  baseURL: "http://localhost:8082",
+  baseURL: "http://localhost:8088",
   timeout: 8000,
 });
 
