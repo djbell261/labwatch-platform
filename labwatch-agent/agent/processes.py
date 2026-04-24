@@ -22,6 +22,9 @@ def collect_top_processes(limit: int) -> list[ProcessMetric]:
             if cpu_percent <= 0.0 and memory_percent <= 0.0:
                 continue
 
+            if cpu_percent is None or memory_percent is None:
+                continue
+
             processes.append(
                 ProcessMetric(
                     processName=info.get("name") or "unknown",

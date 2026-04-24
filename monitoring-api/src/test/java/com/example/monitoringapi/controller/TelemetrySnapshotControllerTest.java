@@ -25,6 +25,7 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
@@ -32,6 +33,28 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 @SpringBootTest
 @AutoConfigureMockMvc
 class TelemetrySnapshotControllerTest {
+
+    private static final String VALID_SNAPSHOT_TEMPLATE = """
+            {
+              "machineIdentifier": "%s",
+              "hostname": "%s",
+              "osType": "%s",
+              "osVersion": "%s",
+              "uptimeSeconds": %d,
+              "timestamp": "%s",
+              "cpuUsage": %.1f,
+              "memoryUsage": %.1f,
+              "diskUsage": %.1f,
+              "source": "%s",
+              "processMetrics": [
+                {
+                  "processName": "java",
+                  "cpuPercent": 22.4,
+                  "memoryPercent": 18.7
+                }
+              ]
+            }
+            """;
 
     @Autowired
     private MockMvc mockMvc;
@@ -59,27 +82,18 @@ class TelemetrySnapshotControllerTest {
     void createSnapshotPersistsTelemetryAndNormalizesEvents() throws Exception {
         mockMvc.perform(post("/api/v1/telemetry/snapshots")
                         .contentType(MediaType.APPLICATION_JSON)
-                        .content("""
-                                {
-                                  "machineIdentifier": "derwins-macbook",
-                                  "hostname": "Derwins-MacBook-Air",
-                                  "osType": "Darwin",
-                                  "osVersion": "23.5.0",
-                                  "uptimeSeconds": 123456,
-                                  "timestamp": "2026-04-24T14:10:00",
-                                  "cpuUsage": 42.5,
-                                  "memoryUsage": 68.2,
-                                  "diskUsage": 74.1,
-                                  "source": "python-agent",
-                                  "processMetrics": [
-                                    {
-                                      "processName": "java",
-                                      "cpuPercent": 22.4,
-                                      "memoryPercent": 18.7
-                                    }
-                                  ]
-                                }
-                                """))
+                        .content(validSnapshotJson(
+                                "derwins-macbook",
+                                "Derwins-MacBook-Air",
+                                "Darwin",
+                                "23.5.0",
+                                123456,
+                                "2026-04-24T14:10:00",
+                                42.5,
+                                68.2,
+                                74.1,
+                                "python-agent"
+                        )))
                 .andExpect(status().isCreated())
                 .andExpect(jsonPath("$.machineIdentifier").value("derwins-macbook"))
                 .andExpect(jsonPath("$.hostname").value("Derwins-MacBook-Air"))
@@ -113,6 +127,47 @@ class TelemetrySnapshotControllerTest {
     }
 
     @Test
+    void getRecentSnapshotsReturnsNewestFirst() throws Exception {
+        createSnapshot("machine-a", "host-a", "2026-04-24T14:00:00", 40.0, 50.0, 60.0);
+        createSnapshot("machine-a", "host-a", "2026-04-24T14:05:00", 41.0, 51.0, 61.0);
+        createSnapshot("machine-b", "host-b", "2026-04-24T14:10:00", 42.0, 52.0, 62.0);
+
+        mockMvc.perform(get("/api/v1/telemetry/snapshots"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$[0].machineIdentifier").value("machine-b"))
+                .andExpect(jsonPath("$[0].timestamp").value("2026-04-24T14:10:00"))
+                .andExpect(jsonPath("$[1].timestamp").value("2026-04-24T14:05:00"))
+                .andExpect(jsonPath("$[2].timestamp").value("2026-04-24T14:00:00"));
+    }
+
+    @Test
+    void getLatestSnapshotReturnsNewestOverall() throws Exception {
+        createSnapshot("machine-a", "host-a", "2026-04-24T14:00:00", 40.0, 50.0, 60.0);
+        createSnapshot("machine-b", "host-b", "2026-04-24T14:10:00", 42.0, 52.0, 62.0);
+
+        mockMvc.perform(get("/api/v1/telemetry/snapshots/latest"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.machineIdentifier").value("machine-b"))
+                .andExpect(jsonPath("$.hostname").value("host-b"))
+                .andExpect(jsonPath("$.timestamp").value("2026-04-24T14:10:00"))
+                .andExpect(jsonPath("$.cpuUsage").value(42.0));
+    }
+
+    @Test
+    void getLatestSnapshotByMachineIdentifierReturnsNewestForMachine() throws Exception {
+        createSnapshot("machine-a", "host-a", "2026-04-24T14:00:00", 40.0, 50.0, 60.0);
+        createSnapshot("machine-a", "host-a", "2026-04-24T14:30:00", 43.0, 53.0, 63.0);
+        createSnapshot("machine-b", "host-b", "2026-04-24T14:45:00", 44.0, 54.0, 64.0);
+
+        mockMvc.perform(get("/api/v1/telemetry/snapshots/latest")
+                        .param("machineIdentifier", "machine-a"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.machineIdentifier").value("machine-a"))
+                .andExpect(jsonPath("$.timestamp").value("2026-04-24T14:30:00"))
+                .andExpect(jsonPath("$.cpuUsage").value(43.0));
+    }
+
+    @Test
     void createSnapshotRejectsInvalidUsageValues() throws Exception {
         mockMvc.perform(post("/api/v1/telemetry/snapshots")
                         .contentType(MediaType.APPLICATION_JSON)
@@ -137,5 +192,56 @@ class TelemetrySnapshotControllerTest {
         assertThat(telemetrySnapshotRepository.findAll()).isEmpty();
         assertThat(healthEventRepository.findAll()).isEmpty();
         verifyNoInteractions(healthEventProducer);
+    }
+
+    private void createSnapshot(
+            String machineIdentifier,
+            String hostname,
+            String timestamp,
+            double cpuUsage,
+            double memoryUsage,
+            double diskUsage
+    ) throws Exception {
+        mockMvc.perform(post("/api/v1/telemetry/snapshots")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(validSnapshotJson(
+                                machineIdentifier,
+                                hostname,
+                                "Linux",
+                                "6.8.0",
+                                1000,
+                                timestamp,
+                                cpuUsage,
+                                memoryUsage,
+                                diskUsage,
+                                "python-agent"
+                        )))
+                .andExpect(status().isCreated());
+    }
+
+    private String validSnapshotJson(
+            String machineIdentifier,
+            String hostname,
+            String osType,
+            String osVersion,
+            long uptimeSeconds,
+            String timestamp,
+            double cpuUsage,
+            double memoryUsage,
+            double diskUsage,
+            String source
+    ) {
+        return VALID_SNAPSHOT_TEMPLATE.formatted(
+                machineIdentifier,
+                hostname,
+                osType,
+                osVersion,
+                uptimeSeconds,
+                timestamp,
+                cpuUsage,
+                memoryUsage,
+                diskUsage,
+                source
+        );
     }
 }

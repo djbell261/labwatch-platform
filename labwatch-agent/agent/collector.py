@@ -21,9 +21,9 @@ class TelemetryCollector:
         os_version = platform.version()
         uptime_seconds = int(time.time() - psutil.boot_time())
 
-        cpu_usage = round(psutil.cpu_percent(interval=1.0), 2)
-        memory_usage = round(psutil.virtual_memory().percent, 2)
-        disk_usage = round(psutil.disk_usage("/").percent, 2)
+        cpu_usage = round(psutil.cpu_percent(interval=1.0) or 0.0, 2)
+        memory_usage = round(psutil.virtual_memory().percent or 0.0, 2)
+        disk_usage = round(psutil.disk_usage("/").percent or 0.0, 2)
         process_metrics = collect_top_processes(self.top_process_count)
 
         return TelemetrySnapshot(
@@ -32,7 +32,7 @@ class TelemetryCollector:
             osType=os_type,
             osVersion=os_version,
             uptimeSeconds=uptime_seconds,
-            timestamp=TelemetrySnapshot.utc_now_iso(),
+            timestamp=TelemetrySnapshot.current_local_iso(),
             cpuUsage=cpu_usage,
             memoryUsage=memory_usage,
             diskUsage=disk_usage,
