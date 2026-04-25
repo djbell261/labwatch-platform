@@ -82,5 +82,30 @@ services:
     ports:
       - "8088:8088"
 
+  ai-engine-service:
+    build:
+      context: ./ai-engine-service
+    container_name: labwatch-ai-engine-service
+    depends_on:
+      postgres:
+        condition: service_healthy
+      kafka:
+        condition: service_started
+    environment:
+      SERVER_PORT: 8090
+      SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/${POSTGRES_DB:-labwatch}
+      SPRING_DATASOURCE_USERNAME: ${POSTGRES_USER:-postgres}
+      SPRING_DATASOURCE_PASSWORD: ${POSTGRES_PASSWORD:-postgres}
+      KAFKA_BOOTSTRAP_SERVERS: kafka:29092
+      HEALTH_EVENTS_TOPIC: ${HEALTH_EVENTS_TOPIC:-health-events}
+      ANOMALY_EVENTS_TOPIC: ${ANOMALY_EVENTS_TOPIC:-anomaly-events}
+      SPRING_KAFKA_CONSUMER_GROUP_ID: ${AI_ENGINE_CONSUMER_GROUP_ID:-ai-engine-group}
+      SPRING_JPA_HIBERNATE_DDL_AUTO: ${SPRING_JPA_HIBERNATE_DDL_AUTO:-update}
+      ANOMALY_WINDOW_SIZE: ${ANOMALY_WINDOW_SIZE:-10}
+      ANOMALY_MINIMUM_SAMPLES: ${ANOMALY_MINIMUM_SAMPLES:-5}
+      ANOMALY_Z_SCORE_THRESHOLD: ${ANOMALY_Z_SCORE_THRESHOLD:-2.5}
+    ports:
+      - "8090:8090"
+
 volumes:
   postgres-data:

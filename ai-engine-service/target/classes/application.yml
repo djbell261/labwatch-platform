@@ -1,0 +1,76 @@
+server:
+  port: ${SERVER_PORT:8090}
+
+spring:
+  application:
+    name: ai-engine-service
+
+  datasource:
+    url: ${SPRING_DATASOURCE_URL:jdbc:postgresql://localhost:5433/labwatch}
+    username: ${SPRING_DATASOURCE_USERNAME:postgres}
+    password: ${SPRING_DATASOURCE_PASSWORD:Noah2511}
+    driver-class-name: org.postgresql.Driver
+
+  jpa:
+    hibernate:
+      ddl-auto: ${SPRING_JPA_HIBERNATE_DDL_AUTO:update}
+    show-sql: ${SPRING_JPA_SHOW_SQL:true}
+    properties:
+      hibernate:
+        format_sql: ${SPRING_JPA_PROPERTIES_HIBERNATE_FORMAT_SQL:true}
+        dialect: ${SPRING_JPA_DATABASE_PLATFORM:org.hibernate.dialect.PostgreSQLDialect}
+
+  kafka:
+    bootstrap-servers: ${KAFKA_BOOTSTRAP_SERVERS:localhost:9092}
+    consumer:
+      group-id: ${SPRING_KAFKA_CONSUMER_GROUP_ID:ai-engine-group}
+      auto-offset-reset: ${SPRING_KAFKA_CONSUMER_AUTO_OFFSET_RESET:earliest}
+      key-deserializer: org.apache.kafka.common.serialization.StringDeserializer
+      value-deserializer: org.springframework.kafka.support.serializer.JsonDeserializer
+      properties:
+        spring:
+          json:
+            trusted:
+              packages: "*"
+            use:
+              type:
+                headers: false
+            value:
+              default:
+                type: com.example.aiengineservice.dto.HealthEventMessage
+    producer:
+      key-serializer: org.apache.kafka.common.serialization.StringSerializer
+      value-serializer: org.springframework.kafka.support.serializer.JsonSerializer
+
+logging:
+  level:
+    root: ${LOGGING_LEVEL_ROOT:INFO}
+    org.springframework: ${LOGGING_LEVEL_ORG_SPRINGFRAMEWORK:INFO}
+
+ai:
+  provider: ${AI_PROVIDER:openai}
+  openai:
+    model: ${OPENAI_MODEL:gpt-4o-mini}
+    base-url: ${OPENAI_BASE_URL:https://api.openai.com}
+  bedrock:
+    model-id: ${BEDROCK_MODEL_ID:anthropic.claude-3-haiku-20240307-v1:0}
+
+services:
+  monitoring-api:
+    base-url: ${MONITORING_API_BASE_URL:http://monitoring-api:8089}
+  alert-engine:
+    base-url: ${ALERT_ENGINE_BASE_URL:http://alert-engine:8088}
+  http:
+    connect-timeout-ms: ${SERVICES_HTTP_CONNECT_TIMEOUT_MS:2000}
+    read-timeout-ms: ${SERVICES_HTTP_READ_TIMEOUT_MS:3000}
+
+app:
+  kafka:
+    topic:
+      auto-create-enabled: ${KAFKA_TOPIC_AUTO_CREATE_ENABLED:true}
+      health-events: ${HEALTH_EVENTS_TOPIC:health-events}
+      anomaly-events: ${ANOMALY_EVENTS_TOPIC:anomaly-events}
+  anomaly:
+    window-size: ${ANOMALY_WINDOW_SIZE:10}
+    minimum-samples: ${ANOMALY_MINIMUM_SAMPLES:5}
+    z-score-threshold: ${ANOMALY_Z_SCORE_THRESHOLD:2.5}

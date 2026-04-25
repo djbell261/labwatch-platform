@@ -1,12 +1,11 @@
+import { useMemo } from "react";
 import {
   CartesianGrid,
-  LabelList,
   Legend,
   Line,
   LineChart,
   ReferenceDot,
   ResponsiveContainer,
-  Scatter,
   Tooltip,
   XAxis,
   YAxis,
@@ -17,6 +16,7 @@ import {
   buildChartData,
   formatAlertTime,
   metricMeta,
+  normalizeAnomaly,
 } from "./telemetryChartUtils";
 
 function getAlertMarkerStyle(marker) {
@@ -34,11 +34,12 @@ function getAlertMarkerStyle(marker) {
 
 function getAnomalyMarkerStyle(marker) {
   return {
-    fill: "#a78bfa",
-    stroke: "#ffffff",
-    strokeWidth: 1.5,
-    r: 6,
-    fillOpacity: 0.85,
+    fill: "#a855f7",
+    stroke: "#f3e8ff",
+    strokeWidth: 2.5,
+    r: 8,
+    fillOpacity: 0.95,
+    glow: "drop-shadow(0 0 8px rgba(168, 85, 247, 0.95)) drop-shadow(0 0 16px rgba(192, 132, 252, 0.65))",
   };
 }
 
@@ -117,12 +118,16 @@ function CustomTooltip({ active, payload, label }) {
           }}
         >
           <div style={{ color: "#c4b5fd", fontWeight: 700, marginBottom: "6px" }}>
-            AI Anomaly Marker
+            {markerPayload.payload.fallback ? "Approximate anomaly placement" : "AI Anomaly Marker"}
           </div>
           <div style={{ color: "#e2e8f0" }}>Metric: {markerPayload.payload.metricType}</div>
           <div style={{ color: "#e2e8f0" }}>Severity: {markerPayload.payload.severity}</div>
-          <div style={{ color: "#e2e8f0" }}>Score: {markerPayload.payload.score ?? "--"}</div>
-          <div style={{ color: "#94a3b8" }}>Timestamp: {formatAlertTime(markerPayload.payload.timestamp)}</div>
+          <div style={{ color: "#e2e8f0" }}>
+            Anomaly Score: {markerPayload.payload.anomalyScore?.toFixed?.(2) ?? "--"}
+          </div>
+          <div style={{ color: "#94a3b8" }}>
+            Timestamp: {formatAlertTime(markerPayload.payload.detectedAt || markerPayload.payload.timestamp)}
+          </div>
           <div style={{ color: "#cbd5e1", marginTop: "6px" }}>
             {markerPayload.payload.explanation}
           </div>
@@ -224,14 +229,67 @@ function renderAlertMarker(marker) {
   );
 }
 
-function TelemetryTrendChart({ telemetryHistory, alerts, anomalies = [] }) {
-  const chartData = buildChartData(telemetryHistory);
-  const alertMarkers = buildAlertMarkers(chartData, alerts);
-  const anomalyMarkers = buildAnomalyMarkers(chartData, anomalies);
+function renderAnomalyMarker(marker) {
+  const style = getAnomalyMarkerStyle(marker);
+
+  return (
+    <ReferenceDot
+      key={marker.id}
+      x={marker.x}
+      y={marker.y}
+      r={style.r}
+      fill={style.fill}
+      fillOpacity={style.fillOpacity}
+      stroke={style.stroke}
+      strokeWidth={style.strokeWidth}
+      ifOverflow="visible"
+      isFront
+      style={{ filter: style.glow }}
+    />
+  );
+}
+
+function LegendContent() {
+  return (
+    <div
+      style={{
+        alignItems: "center",
+        color: "#cbd5e1",
+        display: "flex",
+        flexWrap: "wrap",
+        gap: "16px",
+        justifyContent: "center",
+        paddingTop: "8px",
+      }}
+    >
+      <span>🟣 = anomaly</span>
+      <span>🔴 = alert</span>
+    </div>
+  );
+}
+
+function TelemetryTrendChart({
+  telemetryHistory,
+  alerts,
+  anomalies = [],
+  anomaliesLoading = false,
+  anomaliesError = "",
+}) {
+  const chartData = useMemo(() => buildChartData(telemetryHistory), [telemetryHistory]);
+  const alertMarkers = useMemo(() => buildAlertMarkers(chartData, alerts), [chartData, alerts]);
+  const normalizedAnomalies = useMemo(
+    () => (Array.isArray(anomalies) ? anomalies.map(normalizeAnomaly).filter(Boolean) : []),
+    [anomalies]
+  );
+  const anomalyMarkers = useMemo(
+    () => buildAnomalyMarkers(chartData, normalizedAnomalies),
+    [chartData, normalizedAnomalies]
+  );
   const totalAlerts = Array.isArray(alerts) ? alerts.length : 0;
   const visibleAlerts = Array.isArray(alerts)
     ? alerts.filter((alert) => alert?.createdAt && metricMeta[alert.alertType]).length
     : 0;
+  const totalAnomalies = normalizedAnomalies.length;
 
   return (
     <section
@@ -276,7 +334,7 @@ function TelemetryTrendChart({ telemetryHistory, alerts, anomalies = [] }) {
             padding: "10px 14px",
           }}
         >
-          {chartData.length} points · {alertMarkers.length} alert markers
+          {chartData.length} points · {alertMarkers.length} alert markers · {anomalyMarkers.length} anomaly markers
         </div>
       </div>
 
@@ -288,8 +346,25 @@ function TelemetryTrendChart({ telemetryHistory, alerts, anomalies = [] }) {
         }}
       >
         total alerts received: {totalAlerts} · visible alerts: {visibleAlerts} · alert markers:{" "}
-        {alertMarkers.length}
+        {alertMarkers.length} · total anomalies: {totalAnomalies} · visible anomalies:{" "}
+        {anomalyMarkers.length}
       </div>
+
+      {anomaliesError ? (
+        <div
+          style={{
+            background: "rgba(91, 33, 182, 0.16)",
+            border: "1px solid rgba(196, 181, 253, 0.2)",
+            borderRadius: "14px",
+            color: "#ddd6fe",
+            fontSize: "0.92rem",
+            marginBottom: "14px",
+            padding: "10px 12px",
+          }}
+        >
+          {anomaliesError}
+        </div>
+      ) : null}
 
       <div
         style={{
@@ -301,6 +376,27 @@ function TelemetryTrendChart({ telemetryHistory, alerts, anomalies = [] }) {
           marginBottom: "14px",
         }}
       >
+        <div
+          style={{
+            alignItems: "center",
+            display: "flex",
+            gap: "8px",
+          }}
+        >
+          <span
+            style={{
+              background: "#a855f7",
+              border: "2px solid #f3e8ff",
+              borderRadius: "999px",
+              boxShadow: "0 0 14px rgba(168, 85, 247, 0.95)",
+              display: "inline-block",
+              height: "16px",
+              width: "16px",
+            }}
+          />
+          <span>🟣 = anomaly</span>
+        </div>
+
         <div
           style={{
             alignItems: "center",
@@ -387,10 +483,7 @@ function TelemetryTrendChart({ telemetryHistory, alerts, anomalies = [] }) {
                 />
                 <Tooltip content={<CustomTooltip />} />
                 <Legend
-                  wrapperStyle={{
-                    color: "#e2e8f0",
-                    paddingTop: "8px",
-                  }}
+                  content={<LegendContent />}
                 />
                 <Line
                   type="monotone"
@@ -421,38 +514,22 @@ function TelemetryTrendChart({ telemetryHistory, alerts, anomalies = [] }) {
                 />
 
                 {alertMarkers.map(renderAlertMarker)}
-
-                {anomalyMarkers.length > 0 ? (
-                  <Scatter
-                    data={anomalyMarkers}
-                    dataKey="y"
-                    fill="#a78bfa"
-                    name="AI Anomalies"
-                  >
-                    <LabelList dataKey="metricType" position="top" fill="#c4b5fd" fontSize={11} />
-                  </Scatter>
-                ) : null}
-
-                {anomalyMarkers.map((marker) => {
-                  const style = getAnomalyMarkerStyle(marker);
-                  return (
-                    <ReferenceDot
-                      key={marker.id}
-                      x={marker.x}
-                      y={marker.y}
-                      r={style.r}
-                      fill={style.fill}
-                      fillOpacity={style.fillOpacity}
-                      stroke={style.stroke}
-                      strokeWidth={style.strokeWidth}
-                      ifOverflow="visible"
-                      isFront
-                    />
-                  );
-                })}
+                {anomalyMarkers.map(renderAnomalyMarker)}
               </LineChart>
             </ResponsiveContainer>
           </div>
+
+          {anomaliesLoading ? (
+            <div
+              style={{
+                color: "#a78bfa",
+                fontSize: "0.9rem",
+                marginBottom: "18px",
+              }}
+            >
+              Loading anomaly markers...
+            </div>
+          ) : null}
 
           <div>
             <div
