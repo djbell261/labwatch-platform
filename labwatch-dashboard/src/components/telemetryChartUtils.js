@@ -1,6 +1,7 @@
 const ALERT_MATCH_WINDOW_MS = 10 * 60 * 1000;
 const ALERT_FILTER_BUFFER_MS = 10 * 60 * 1000;
-const ANOMALY_MATCH_WINDOW_MS = 10 * 60 * 1000;
+const ANOMALY_MATCH_WINDOW_MS = 30 * 60 * 1000;
+const FALLBACK_ANOMALY_LIMIT = 5;
 
 export const metricMeta = {
   CPU: { key: "cpuUsage", color: "#38bdf8", label: "CPU" },
@@ -144,6 +145,11 @@ export function buildAlertMarkers(chartData, alerts) {
 
 export function buildAnomalyMarkers(chartData, anomalies = []) {
   if (!Array.isArray(anomalies) || anomalies.length === 0 || chartData.length === 0) {
+    console.debug("[TelemetryChart] anomaly summary", {
+      totalAnomalies: Array.isArray(anomalies) ? anomalies.length : 0,
+      matchedAnomalies: 0,
+      fallbackAnomaliesUsed: 0,
+    });
     return [];
   }
 
@@ -151,47 +157,186 @@ export function buildAnomalyMarkers(chartData, anomalies = []) {
   const maxChartTime =
     parseTelemetryTime(chartData[chartData.length - 1]?.timestamp)?.getTime() ?? 0;
 
-  return anomalies
-    .map(normalizeAnomaly)
-    .filter((anomaly) => {
-      if (!anomaly?.metricType || !metricMeta[anomaly.metricType] || !anomaly.detectedAt) {
-        return false;
-      }
-
-      const anomalyDate = parseAlertTime(anomaly.detectedAt) || parseTelemetryTime(anomaly.detectedAt);
-      return isTimeWithinRange(anomalyDate, minChartTime, maxChartTime);
-    })
-    .map((anomaly) => {
-      const metric = metricMeta[anomaly.metricType];
-      if (!metric || !anomaly.detectedAt) {
-        return null;
-      }
-
-      const matchedPoint = findClosestTelemetryPoint(chartData, anomaly.detectedAt, {
-        matchWindowMs: ANOMALY_MATCH_WINDOW_MS,
-      });
-      if (!matchedPoint) {
-        return null;
-      }
-
-      return {
-        id: anomaly.id || anomaly.anomalyId || `${anomaly.metricType}-${anomaly.detectedAt}`,
-        type: "anomaly",
-        metricType: anomaly.metricType,
-        severity: anomaly.severity || "MEDIUM",
-        anomalyScore: anomaly.anomalyScore,
-        explanation: anomaly.explanation || "Potential anomaly detected",
-        detectedAt: anomaly.detectedAt,
-        timestamp: anomaly.detectedAt,
-        x: matchedPoint.time,
-        y: matchedPoint[metric.key],
-        chartTimestamp: matchedPoint.timestamp,
-        metricKey: metric.key,
-        color: "#a855f7",
-      };
-    })
+  const normalizedAnomalies = anomalies.map(normalizeAnomaly).filter(Boolean);
+  const matchedMarkers = normalizedAnomalies
+    .map((anomaly, index) => buildMatchedAnomalyMarker(chartData, anomaly, index, minChartTime, maxChartTime))
     .filter(Boolean)
     .sort((left, right) => new Date(right.detectedAt).getTime() - new Date(left.detectedAt).getTime());
+
+  if (matchedMarkers.length > 0) {
+    console.debug("[TelemetryChart] anomaly summary", {
+      totalAnomalies: normalizedAnomalies.length,
+      matchedAnomalies: matchedMarkers.length,
+      fallbackAnomaliesUsed: 0,
+      selectedTimestampFields: normalizedAnomalies.map((anomaly) => anomaly.resolvedTimestampField ?? null),
+    });
+    return matchedMarkers;
+  }
+
+  const fallbackMarkers = buildFallbackAnomalyMarkers(chartData, normalizedAnomalies);
+
+  console.debug("[TelemetryChart] anomaly summary", {
+    totalAnomalies: normalizedAnomalies.length,
+    matchedAnomalies: 0,
+    fallbackAnomaliesUsed: fallbackMarkers.length,
+    selectedTimestampFields: normalizedAnomalies.map((anomaly) => anomaly.resolvedTimestampField ?? null),
+  });
+
+  return fallbackMarkers;
+}
+
+function buildMatchedAnomalyMarker(chartData, anomaly, index, minChartTime, maxChartTime) {
+  const debugPrefix = `[TelemetryChart][Anomaly ${index + 1}]`;
+  const metric = metricMeta[anomaly?.metricType];
+  const rawTimestampValue = anomaly?.resolvedTimestampValue;
+  const parsedAnomalyTime =
+    parseAlertTime(rawTimestampValue) ||
+    parseTelemetryTime(rawTimestampValue) ||
+    null;
+
+  console.debug(`${debugPrefix} raw anomaly`, anomaly?.raw ?? anomaly);
+  console.debug(`${debugPrefix} selected timestamp field`, {
+    resolvedTimestampField: anomaly?.resolvedTimestampField ?? null,
+    resolvedTimestampValue: rawTimestampValue ?? null,
+  });
+  console.debug(`${debugPrefix} parsed anomaly time`, {
+    parsedAnomalyTime: parsedAnomalyTime?.toISOString?.() ?? null,
+    chartMinTime: minChartTime ? new Date(minChartTime).toISOString() : null,
+    chartMaxTime: maxChartTime ? new Date(maxChartTime).toISOString() : null,
+  });
+
+  if (!metric) {
+    console.debug(`${debugPrefix} skipped`, {
+      reason: "unsupported or missing metric field",
+      metricType: anomaly?.metricType ?? null,
+    });
+    return null;
+  }
+
+  if (!rawTimestampValue || !parsedAnomalyTime) {
+    console.debug(`${debugPrefix} skipped`, {
+      reason: "missing or unparsable timestamp",
+      resolvedTimestampValue: rawTimestampValue ?? null,
+    });
+    return null;
+  }
+
+  const matchedPoint = findClosestTelemetryPoint(chartData, rawTimestampValue, {
+    matchWindowMs: ANOMALY_MATCH_WINDOW_MS,
+  });
+
+  if (!matchedPoint) {
+    console.debug(`${debugPrefix} skipped`, {
+      reason: "no telemetry point found within 30-minute anomaly match window",
+      resolvedTimestampValue: rawTimestampValue,
+    });
+    return null;
+  }
+
+  const matchedPointTime = parseTelemetryTime(matchedPoint.timestamp);
+  const diffMs = matchedPointTime
+    ? Math.abs(matchedPointTime.getTime() - parsedAnomalyTime.getTime())
+    : null;
+
+  console.debug(`${debugPrefix} closest telemetry match`, {
+    closestTelemetryPointTime: matchedPointTime?.toISOString?.() ?? null,
+    timeDifferenceMinutes: diffMs === null ? null : Number((diffMs / 60000).toFixed(2)),
+    anomalyInsideVisibleRange: isTimeWithinRange(parsedAnomalyTime, minChartTime, maxChartTime),
+    matchedPointInsideVisibleRange: matchedPointTime
+      ? isTimeWithinRange(matchedPointTime, minChartTime, maxChartTime)
+      : false,
+  });
+
+  return createAnomalyMarker({
+    anomaly,
+    matchedPoint,
+    idSuffix: index,
+    fallback: false,
+    timeDifferenceMinutes: diffMs === null ? null : Number((diffMs / 60000).toFixed(2)),
+  });
+}
+
+function buildFallbackAnomalyMarkers(chartData, normalizedAnomalies) {
+  const sortedAnomalies = [...normalizedAnomalies]
+    .filter((anomaly) => metricMeta[anomaly?.metricType])
+    .sort((left, right) => {
+      const leftTime =
+        parseAlertTime(left.detectedAt)?.getTime() ||
+        parseTelemetryTime(left.detectedAt)?.getTime() ||
+        0;
+      const rightTime =
+        parseAlertTime(right.detectedAt)?.getTime() ||
+        parseTelemetryTime(right.detectedAt)?.getTime() ||
+        0;
+      return rightTime - leftTime;
+    })
+    .slice(0, FALLBACK_ANOMALY_LIMIT);
+
+  const sortedPoints = [...chartData]
+    .sort((left, right) => {
+      const leftTime = parseTelemetryTime(left.timestamp)?.getTime() ?? 0;
+      const rightTime = parseTelemetryTime(right.timestamp)?.getTime() ?? 0;
+      return rightTime - leftTime;
+    })
+    .slice(0, FALLBACK_ANOMALY_LIMIT);
+
+  const fallbackMarkers = sortedAnomalies
+    .map((anomaly, index) => {
+      const matchedPoint = sortedPoints[index];
+
+      if (!matchedPoint) {
+        console.debug("[TelemetryChart][Fallback] skipped", {
+          reason: "no remaining telemetry point for fallback placement",
+          anomaly,
+        });
+        return null;
+      }
+
+      console.debug("[TelemetryChart][Fallback] using approximate placement", {
+        anomalyId: anomaly.id || anomaly.anomalyId || null,
+        metricType: anomaly.metricType,
+        selectedTimestampField: anomaly.resolvedTimestampField ?? null,
+        selectedTimestampValue: anomaly.resolvedTimestampValue ?? null,
+        fallbackTelemetryPointTime: matchedPoint.timestamp,
+        fallbackIndex: index,
+      });
+
+      return createAnomalyMarker({
+        anomaly,
+        matchedPoint,
+        idSuffix: `fallback-${index}`,
+        fallback: true,
+        timeDifferenceMinutes: null,
+      });
+    })
+    .filter(Boolean);
+
+  return fallbackMarkers;
+}
+
+function createAnomalyMarker({ anomaly, matchedPoint, idSuffix, fallback, timeDifferenceMinutes }) {
+  const metric = metricMeta[anomaly.metricType];
+
+  return {
+    id:
+      anomaly.id ||
+      anomaly.anomalyId ||
+      `${anomaly.metricType}-${anomaly.resolvedTimestampValue}-${idSuffix}`,
+    type: "anomaly",
+    metricType: anomaly.metricType,
+    severity: anomaly.severity || "MEDIUM",
+    anomalyScore: anomaly.anomalyScore,
+    explanation: anomaly.explanation || "Potential anomaly detected",
+    detectedAt: anomaly.resolvedTimestampValue,
+    timestamp: anomaly.resolvedTimestampValue,
+    x: matchedPoint.time,
+    y: matchedPoint[metric.key],
+    chartTimestamp: matchedPoint.timestamp,
+    metricKey: metric.key,
+    color: "#a855f7",
+    fallback,
+    timeDifferenceMinutes,
+  };
 }
 
 export function normalizeAnomaly(anomaly) {
@@ -199,18 +344,23 @@ export function normalizeAnomaly(anomaly) {
     return null;
   }
 
-  const metricType = String(
-    anomaly.metricType || anomaly.eventType || anomaly.alertType || ""
-  )
+  const resolvedMetricField = ["metricType", "eventType", "alertType"].find(
+    (field) => anomaly[field] !== undefined && anomaly[field] !== null && String(anomaly[field]).trim() !== ""
+  );
+  const resolvedMetricValue = resolvedMetricField ? anomaly[resolvedMetricField] : "";
+  const metricType = String(resolvedMetricValue || "")
     .trim()
     .toUpperCase();
 
-  const anomalyScoreValue =
-    anomaly.anomalyScore ??
-    anomaly.score ??
-    anomaly.zScore ??
-    anomaly.anomaly_value;
+  const resolvedTimestampField = ["detectedAt", "createdAt", "timestamp", "detected_at"].find(
+    (field) => anomaly[field] !== undefined && anomaly[field] !== null && String(anomaly[field]).trim() !== ""
+  );
+  const resolvedTimestampValue = resolvedTimestampField ? anomaly[resolvedTimestampField] : null;
 
+  const resolvedScoreField = ["anomalyScore", "zScore", "score", "anomaly_value"].find(
+    (field) => anomaly[field] !== undefined && anomaly[field] !== null && String(anomaly[field]).trim() !== ""
+  );
+  const anomalyScoreValue = resolvedScoreField ? anomaly[resolvedScoreField] : null;
   const normalizedScore =
     anomalyScoreValue === null || anomalyScoreValue === undefined || anomalyScoreValue === ""
       ? null
@@ -218,9 +368,14 @@ export function normalizeAnomaly(anomaly) {
 
   return {
     ...anomaly,
+    raw: anomaly,
     metricType,
     anomalyScore: Number.isFinite(normalizedScore) ? normalizedScore : null,
-    detectedAt: anomaly.detectedAt || anomaly.timestamp || anomaly.createdAt || anomaly.detected_at,
+    detectedAt: resolvedTimestampValue,
+    resolvedTimestampField,
+    resolvedTimestampValue,
+    resolvedMetricField,
+    resolvedScoreField,
     explanation:
       anomaly.explanation ||
       anomaly.message ||
@@ -329,7 +484,7 @@ function findClosestTelemetryPoint(chartData, rawTimestamp, options = {}) {
   ].filter(Boolean);
 
   if (candidateMatches.length === 0) {
-  console.debug("[TelemetryChart] no candidate matches available", {
+    console.debug("[TelemetryChart] no candidate matches available", {
       rawAlertCreatedAt: rawTimestamp,
       parsedAlertTime: directAlertDate?.toISOString() ?? null,
       adjustedAlertTime: adjustedAlertDate?.toISOString() ?? null,
@@ -373,7 +528,11 @@ function buildMatchCandidate(chartData, candidateDate, strategy) {
   }
 
   const targetTime = candidateDate.getTime();
-  const closestPoint = findClosestPoint(chartData, (point) => parseTelemetryTime(point.timestamp)?.getTime(), targetTime);
+  const closestPoint = findClosestPoint(
+    chartData,
+    (point) => parseTelemetryTime(point.timestamp)?.getTime(),
+    targetTime
+  );
 
   if (!closestPoint) {
     return null;
