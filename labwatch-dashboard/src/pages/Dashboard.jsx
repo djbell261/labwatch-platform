@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import AiInsightPanel from "../components/AiInsightPanel";
 import AlertsPanel from "../components/AlertsPanel";
 import TelemetryCard from "../components/TelemetryCard";
 import TelemetryTrendChart from "../components/TelemetryTrendChart";
@@ -275,13 +276,26 @@ function Dashboard() {
           loading={telemetryLoading}
           error={telemetryError}
         />
-        <TelemetryTrendChart
-          telemetryHistory={telemetryHistory}
-          alerts={alerts}
-          anomalies={anomalies}
-          anomaliesLoading={anomaliesLoading}
-          anomaliesError={anomaliesError}
-        />
+        <div
+          style={{
+            display: "grid",
+            gap: "22px",
+            gridTemplateColumns: "minmax(0, 1.65fr) minmax(320px, 1fr)",
+          }}
+        >
+          <TelemetryTrendChart
+            telemetryHistory={telemetryHistory}
+            alerts={alerts}
+            anomalies={anomalies}
+            anomaliesLoading={anomaliesLoading}
+            anomaliesError={anomaliesError}
+          />
+          <AiInsightPanel
+            latestTelemetry={latestTelemetry}
+            alerts={alerts}
+            anomalies={anomalies}
+          />
+        </div>
         <AlertsPanel alerts={alerts} loading={alertsLoading} error={alertsError} />
       </div>
     </main>
