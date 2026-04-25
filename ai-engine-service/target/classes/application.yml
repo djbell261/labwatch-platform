@@ -48,7 +48,7 @@ logging:
     org.springframework: ${LOGGING_LEVEL_ORG_SPRINGFRAMEWORK:INFO}
 
 ai:
-  provider: ${AI_PROVIDER:mock}
+  provider: ${AI_PROVIDER:openai}
   openai:
     model: ${OPENAI_MODEL:gpt-4o-mini}
     base-url: ${OPENAI_BASE_URL:https://api.openai.com}
@@ -57,9 +57,12 @@ ai:
 
 services:
   monitoring-api:
-    base-url: ${MONITORING_API_BASE_URL:http://localhost:8089}
+    base-url: ${MONITORING_API_BASE_URL:http://monitoring-api:8089}
   alert-engine:
-    base-url: ${ALERT_ENGINE_BASE_URL:http://localhost:8088}
+    base-url: ${ALERT_ENGINE_BASE_URL:http://alert-engine:8088}
+  http:
+    connect-timeout-ms: ${SERVICES_HTTP_CONNECT_TIMEOUT_MS:2000}
+    read-timeout-ms: ${SERVICES_HTTP_READ_TIMEOUT_MS:3000}
 
 app:
   kafka:
