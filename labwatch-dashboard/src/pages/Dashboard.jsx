@@ -3,7 +3,7 @@ import AiInsightPanel from "../components/AiInsightPanel";
 import AlertsPanel from "../components/AlertsPanel";
 import TelemetryCard from "../components/TelemetryCard";
 import TelemetryTrendChart from "../components/TelemetryTrendChart";
-import { getAlerts, getAnomalies, getTelemetrySnapshots } from "../services/api";
+import { getAlerts, getAnomalies, getInsight, getTelemetrySnapshots } from "../services/api";
 import { createTelemetrySocket } from "../services/socket";
 
 function getLatestSnapshot(snapshots) {
@@ -40,12 +40,15 @@ function Dashboard() {
   const [telemetryHistory, setTelemetryHistory] = useState([]);
   const [alerts, setAlerts] = useState([]);
   const [anomalies, setAnomalies] = useState([]);
+  const [insightText, setInsightText] = useState("");
+  const [insightSource, setInsightSource] = useState("backend");
   const [telemetryLoading, setTelemetryLoading] = useState(true);
   const [alertsLoading, setAlertsLoading] = useState(true);
   const [anomaliesLoading, setAnomaliesLoading] = useState(true);
   const [telemetryError, setTelemetryError] = useState("");
   const [alertsError, setAlertsError] = useState("");
   const [anomaliesError, setAnomaliesError] = useState("");
+  const [insightError, setInsightError] = useState("");
   const [socketStatus, setSocketStatus] = useState("connecting");
 
   const refreshAlerts = async (isMountedRef) => {
@@ -76,6 +79,40 @@ function Dashboard() {
       if (isMountedRef.current) {
         setAlertsLoading(false);
       }
+    }
+  };
+
+  const refreshInsight = async (isMountedRef) => {
+    try {
+      const nextInsight = await getInsight();
+
+      if (!isMountedRef.current) {
+        return;
+      }
+
+      if (nextInsight) {
+        setInsightText(nextInsight);
+        setInsightSource("backend");
+        setInsightError("");
+        return;
+      }
+
+      setInsightText("");
+      setInsightSource("fallback");
+      setInsightError("Insight endpoint returned an empty response. Using local fallback insight.");
+    } catch (error) {
+      if (!isMountedRef.current) {
+        return;
+      }
+
+      const message =
+        error?.response?.data?.message ||
+        error?.message ||
+        "Unable to load AI insight.";
+
+      setInsightText("");
+      setInsightSource("fallback");
+      setInsightError(`AI insight fallback active. ${message}`);
     }
   };
 
@@ -150,6 +187,7 @@ function Dashboard() {
     loadInitialTelemetry();
     refreshAlerts(isMountedRef);
     refreshAnomalies(isMountedRef);
+    refreshInsight(isMountedRef);
 
     const telemetrySocket = createTelemetrySocket({
       onConnect: () => {
@@ -185,6 +223,7 @@ function Dashboard() {
           return nextHistory;
         });
         refreshAlerts(isMountedRef);
+        refreshInsight(isMountedRef);
       },
     });
 
@@ -201,6 +240,7 @@ function Dashboard() {
     const intervalId = window.setInterval(() => {
       refreshAlerts(isMountedRef);
       refreshAnomalies(isMountedRef);
+      refreshInsight(isMountedRef);
     }, 5000);
 
     return () => {
@@ -294,8 +334,23 @@ function Dashboard() {
             latestTelemetry={latestTelemetry}
             alerts={alerts}
             anomalies={anomalies}
+            insightText={insightText}
+            insightSource={insightSource}
           />
         </div>
+        {insightError ? (
+          <div
+            style={{
+              background: "rgba(30, 41, 59, 0.7)",
+              border: "1px solid rgba(148, 163, 184, 0.16)",
+              borderRadius: "16px",
+              color: "#cbd5e1",
+              padding: "12px 14px",
+            }}
+          >
+            {insightError}
+          </div>
+        ) : null}
         <AlertsPanel alerts={alerts} loading={alertsLoading} error={alertsError} />
       </div>
     </main>

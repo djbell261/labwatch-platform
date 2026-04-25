@@ -65,4 +65,14 @@ export async function getAnomalies() {
   }
 }
 
+export async function getInsight() {
+  try {
+    const response = await anomaliesApi.get("/api/insight");
+    return typeof response.data === "string" ? response.data : "";
+  } catch (error) {
+    logRequestError("getInsight", error);
+    throw error;
+  }
+}
+
 export { monitoringApi, alertsApi, anomaliesApi };
