@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import AlertsPanel from "../components/AlertsPanel";
 import TelemetryCard from "../components/TelemetryCard";
 import TelemetryTrendChart from "../components/TelemetryTrendChart";
-import { getAlerts, getTelemetrySnapshots } from "../services/api";
+import { getAlerts, getAnomalies, getTelemetrySnapshots } from "../services/api";
 import { createTelemetrySocket } from "../services/socket";
 
 function getLatestSnapshot(snapshots) {
@@ -38,10 +38,13 @@ function Dashboard() {
   const [latestTelemetry, setLatestTelemetry] = useState(null);
   const [telemetryHistory, setTelemetryHistory] = useState([]);
   const [alerts, setAlerts] = useState([]);
+  const [anomalies, setAnomalies] = useState([]);
   const [telemetryLoading, setTelemetryLoading] = useState(true);
   const [alertsLoading, setAlertsLoading] = useState(true);
+  const [anomaliesLoading, setAnomaliesLoading] = useState(true);
   const [telemetryError, setTelemetryError] = useState("");
   const [alertsError, setAlertsError] = useState("");
+  const [anomaliesError, setAnomaliesError] = useState("");
   const [socketStatus, setSocketStatus] = useState("connecting");
 
   const refreshAlerts = async (isMountedRef) => {
@@ -71,6 +74,37 @@ function Dashboard() {
     } finally {
       if (isMountedRef.current) {
         setAlertsLoading(false);
+      }
+    }
+  };
+
+  const refreshAnomalies = async (isMountedRef) => {
+    setAnomaliesLoading(true);
+
+    try {
+      const anomaliesResponse = await getAnomalies();
+
+      if (!isMountedRef.current) {
+        return;
+      }
+
+      setAnomalies(anomaliesResponse);
+      setAnomaliesError("");
+    } catch (error) {
+      if (!isMountedRef.current) {
+        return;
+      }
+
+      const message =
+        error?.response?.data?.message ||
+        error?.message ||
+        "Unable to load anomaly data.";
+
+      setAnomaliesError("Anomaly refresh failed. Please verify the AI engine is running.");
+      console.error(message);
+    } finally {
+      if (isMountedRef.current) {
+        setAnomaliesLoading(false);
       }
     }
   };
@@ -114,6 +148,7 @@ function Dashboard() {
 
     loadInitialTelemetry();
     refreshAlerts(isMountedRef);
+    refreshAnomalies(isMountedRef);
 
     const telemetrySocket = createTelemetrySocket({
       onConnect: () => {
@@ -162,7 +197,10 @@ function Dashboard() {
 
   useEffect(() => {
     const isMountedRef = { current: true };
-    const intervalId = window.setInterval(() => refreshAlerts(isMountedRef), 5000);
+    const intervalId = window.setInterval(() => {
+      refreshAlerts(isMountedRef);
+      refreshAnomalies(isMountedRef);
+    }, 5000);
 
     return () => {
       isMountedRef.current = false;
@@ -237,7 +275,13 @@ function Dashboard() {
           loading={telemetryLoading}
           error={telemetryError}
         />
-        <TelemetryTrendChart telemetryHistory={telemetryHistory} alerts={alerts} />
+        <TelemetryTrendChart
+          telemetryHistory={telemetryHistory}
+          alerts={alerts}
+          anomalies={anomalies}
+          anomaliesLoading={anomaliesLoading}
+          anomaliesError={anomaliesError}
+        />
         <AlertsPanel alerts={alerts} loading={alertsLoading} error={alertsError} />
       </div>
     </main>

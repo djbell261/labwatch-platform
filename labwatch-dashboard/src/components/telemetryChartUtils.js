@@ -1,5 +1,6 @@
 const ALERT_MATCH_WINDOW_MS = 10 * 60 * 1000;
 const ALERT_FILTER_BUFFER_MS = 10 * 60 * 1000;
+const ANOMALY_MATCH_WINDOW_MS = 10 * 60 * 1000;
 
 export const metricMeta = {
   CPU: { key: "cpuUsage", color: "#38bdf8", label: "CPU" },
@@ -146,36 +147,85 @@ export function buildAnomalyMarkers(chartData, anomalies = []) {
     return [];
   }
 
+  const minChartTime = parseTelemetryTime(chartData[0]?.timestamp)?.getTime() ?? 0;
+  const maxChartTime =
+    parseTelemetryTime(chartData[chartData.length - 1]?.timestamp)?.getTime() ?? 0;
+
   return anomalies
+    .map(normalizeAnomaly)
+    .filter((anomaly) => {
+      if (!anomaly?.metricType || !metricMeta[anomaly.metricType] || !anomaly.detectedAt) {
+        return false;
+      }
+
+      const anomalyDate = parseAlertTime(anomaly.detectedAt) || parseTelemetryTime(anomaly.detectedAt);
+      return isTimeWithinRange(anomalyDate, minChartTime, maxChartTime);
+    })
     .map((anomaly) => {
-      // TODO: Future AI anomaly service can publish:
-      // metricType, score, explanation, timestamp, severity
       const metric = metricMeta[anomaly.metricType];
-      if (!metric || !anomaly.timestamp) {
+      if (!metric || !anomaly.detectedAt) {
         return null;
       }
 
-      const matchedPoint = findClosestTelemetryPoint(chartData, anomaly.timestamp);
+      const matchedPoint = findClosestTelemetryPoint(chartData, anomaly.detectedAt, {
+        matchWindowMs: ANOMALY_MATCH_WINDOW_MS,
+      });
       if (!matchedPoint) {
         return null;
       }
 
       return {
-        id: anomaly.id || `${anomaly.metricType}-${anomaly.timestamp}`,
+        id: anomaly.id || anomaly.anomalyId || `${anomaly.metricType}-${anomaly.detectedAt}`,
         type: "anomaly",
         metricType: anomaly.metricType,
         severity: anomaly.severity || "MEDIUM",
-        score: anomaly.score,
+        anomalyScore: anomaly.anomalyScore,
         explanation: anomaly.explanation || "Potential anomaly detected",
-        timestamp: anomaly.timestamp,
+        detectedAt: anomaly.detectedAt,
+        timestamp: anomaly.detectedAt,
         x: matchedPoint.time,
         y: matchedPoint[metric.key],
         chartTimestamp: matchedPoint.timestamp,
         metricKey: metric.key,
-        color: metric.color,
+        color: "#a855f7",
       };
     })
-    .filter(Boolean);
+    .filter(Boolean)
+    .sort((left, right) => new Date(right.detectedAt).getTime() - new Date(left.detectedAt).getTime());
+}
+
+export function normalizeAnomaly(anomaly) {
+  if (!anomaly) {
+    return null;
+  }
+
+  const metricType = String(
+    anomaly.metricType || anomaly.eventType || anomaly.alertType || ""
+  )
+    .trim()
+    .toUpperCase();
+
+  const anomalyScoreValue =
+    anomaly.anomalyScore ??
+    anomaly.score ??
+    anomaly.zScore ??
+    anomaly.anomaly_value;
+
+  const normalizedScore =
+    anomalyScoreValue === null || anomalyScoreValue === undefined || anomalyScoreValue === ""
+      ? null
+      : Number(anomalyScoreValue);
+
+  return {
+    ...anomaly,
+    metricType,
+    anomalyScore: Number.isFinite(normalizedScore) ? normalizedScore : null,
+    detectedAt: anomaly.detectedAt || anomaly.timestamp || anomaly.createdAt || anomaly.detected_at,
+    explanation:
+      anomaly.explanation ||
+      anomaly.message ||
+      "Statistical deviation detected outside the expected telemetry baseline.",
+  };
 }
 
 function parseDateValue(value, { assumeUtcWhenNoZone }) {
@@ -257,8 +307,18 @@ function isTimeWithinBufferedRange(dateValue, minChartTime, maxChartTime) {
   return time >= minChartTime - ALERT_FILTER_BUFFER_MS && time <= maxChartTime + ALERT_FILTER_BUFFER_MS;
 }
 
-function findClosestTelemetryPoint(chartData, rawAlertTimestamp) {
-  const directAlertDate = parseAlertTime(rawAlertTimestamp);
+function isTimeWithinRange(dateValue, minChartTime, maxChartTime) {
+  if (!dateValue) {
+    return false;
+  }
+
+  const time = dateValue.getTime();
+  return time >= minChartTime && time <= maxChartTime;
+}
+
+function findClosestTelemetryPoint(chartData, rawTimestamp, options = {}) {
+  const { matchWindowMs = ALERT_MATCH_WINDOW_MS } = options;
+  const directAlertDate = parseAlertTime(rawTimestamp) || parseTelemetryTime(rawTimestamp);
   const adjustedAlertDate = adjustAlertTimeByTimezoneOffset(directAlertDate);
 
   const candidateMatches = [
@@ -269,8 +329,8 @@ function findClosestTelemetryPoint(chartData, rawAlertTimestamp) {
   ].filter(Boolean);
 
   if (candidateMatches.length === 0) {
-    console.debug("[TelemetryChart] no candidate matches available", {
-      rawAlertCreatedAt: rawAlertTimestamp,
+  console.debug("[TelemetryChart] no candidate matches available", {
+      rawAlertCreatedAt: rawTimestamp,
       parsedAlertTime: directAlertDate?.toISOString() ?? null,
       adjustedAlertTime: adjustedAlertDate?.toISOString() ?? null,
     });
@@ -282,24 +342,24 @@ function findClosestTelemetryPoint(chartData, rawAlertTimestamp) {
   );
 
   console.debug("[TelemetryChart] closest telemetry match", {
-    rawAlertCreatedAt: rawAlertTimestamp,
+    rawAlertCreatedAt: rawTimestamp,
     parsedAlertTime: directAlertDate?.toISOString() ?? null,
     adjustedAlertTime: adjustedAlertDate?.toISOString() ?? null,
     closestTelemetryTime: bestMatch.point.timestamp,
     diffMinutes: Number((bestMatch.diffMs / 60000).toFixed(2)),
     strategy: bestMatch.strategy,
-    matchSuccess: bestMatch.diffMs <= ALERT_MATCH_WINDOW_MS,
+    matchSuccess: bestMatch.diffMs <= matchWindowMs,
   });
 
-  if (bestMatch.diffMs > ALERT_MATCH_WINDOW_MS) {
+  if (bestMatch.diffMs > matchWindowMs) {
     console.debug("[TelemetryChart] skipping alert: closest telemetry point outside match window", {
-      rawAlertCreatedAt: rawAlertTimestamp,
+      rawAlertCreatedAt: rawTimestamp,
       parsedAlertTime: directAlertDate?.toISOString() ?? null,
       adjustedAlertTime: adjustedAlertDate?.toISOString() ?? null,
       closestTelemetryTime: bestMatch.point.timestamp,
       diffMinutes: Number((bestMatch.diffMs / 60000).toFixed(2)),
       strategy: bestMatch.strategy,
-      allowedWindowMinutes: ALERT_MATCH_WINDOW_MS / 60000,
+      allowedWindowMinutes: matchWindowMs / 60000,
     });
     return null;
   }

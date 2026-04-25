@@ -26,6 +26,8 @@ Kafka (health-events topic)
 ↓
 alert-engine (async processing)
 ↓
+ai-engine-service (anomaly detection)
+↓
 PostgreSQL (alerts + events)
 
 
@@ -44,6 +46,14 @@ PostgreSQL (alerts + events)
 - Prevents duplicate ACTIVE alerts
 - Transitions alerts from ACTIVE → RESOLVED
 - Persists alerts in PostgreSQL
+
+### ai-engine-service
+- Consumes Kafka `health-events`
+- Maintains rolling baselines per machine + metric type
+- Detects anomalies with rolling average, standard deviation, and z-score
+- Publishes anomaly messages to Kafka topic `anomaly-events`
+- Persists detected anomalies in PostgreSQL
+- Exposes REST API at `GET /api/anomalies`
 
 ---
 
@@ -67,6 +77,9 @@ Each alert includes:
 ### Threshold-Based Detection
 Supports CPU, Memory, and Disk thresholds.
 
+### Statistical Anomaly Detection
+Uses a rolling window with configurable minimum samples and z-score threshold to flag outlier telemetry values.
+
 ---
 
 ## Running the System (Docker)
@@ -84,6 +97,7 @@ docker compose up --build
 | -------------- | ---------------------------------------------- |
 | monitoring-api | [http://localhost:8089](http://localhost:8089) |
 | alert-engine   | [http://localhost:8088](http://localhost:8088) |
+| ai-engine-service | [http://localhost:8090](http://localhost:8090) |
 
 ## API Usage
 Create Health Event
@@ -107,7 +121,9 @@ Create Health Event
 - Machine sends event → monitoring-api
 - Event stored + published to Kafka
 - alert-engine consumes event
+- ai-engine-service evaluates the same event stream for anomalies
 - Alert created if threshold exceeded
+- Anomaly published to `anomaly-events` when z-score exceeds the configured threshold
 - Alert resolved when metric normalizes
 
 ## Tech Stack

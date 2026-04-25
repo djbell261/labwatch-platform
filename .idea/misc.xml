@@ -9,6 +9,7 @@
       <list>
         <option value="$PROJECT_DIR$/monitoring-api/pom.xml" />
         <option value="$PROJECT_DIR$/alert-engine/pom.xml" />
+        <option value="$PROJECT_DIR$/ai-engine-service/pom.xml" />
       </list>
     </option>
   </component>
