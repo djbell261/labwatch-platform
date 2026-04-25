@@ -118,7 +118,7 @@ function CustomTooltip({ active, payload, label }) {
           }}
         >
           <div style={{ color: "#c4b5fd", fontWeight: 700, marginBottom: "6px" }}>
-            AI Anomaly Marker
+            {markerPayload.payload.fallback ? "Approximate anomaly placement" : "AI Anomaly Marker"}
           </div>
           <div style={{ color: "#e2e8f0" }}>Metric: {markerPayload.payload.metricType}</div>
           <div style={{ color: "#e2e8f0" }}>Severity: {markerPayload.payload.severity}</div>
