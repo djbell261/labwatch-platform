@@ -27,7 +27,7 @@ function getTopProcess(processMetrics = []) {
     })[0];
 }
 
-function buildInsightModel(latestTelemetry, alerts, anomalies) {
+export function buildInsightModel(latestTelemetry, alerts, anomalies) {
   const cpuUsage = toNumber(latestTelemetry?.cpuUsage) ?? 0;
   const memoryUsage = toNumber(latestTelemetry?.memoryUsage) ?? 0;
   const diskUsage = toNumber(latestTelemetry?.diskUsage) ?? 0;
@@ -124,8 +124,9 @@ function buildInsightModel(latestTelemetry, alerts, anomalies) {
   };
 }
 
-function AiInsightPanel({ latestTelemetry, alerts, anomalies }) {
+function AiInsightPanel({ latestTelemetry, alerts, anomalies, insightText = "", insightSource = "backend" }) {
   const insight = buildInsightModel(latestTelemetry, alerts, anomalies);
+  const narrative = insightText || `${insight.likelyIssue} ${insight.processSummary}`;
 
   return (
     <section
@@ -176,6 +177,18 @@ function AiInsightPanel({ latestTelemetry, alerts, anomalies }) {
 
       <div
         style={{
+          color: insightSource === "backend" ? "#c4b5fd" : "#94a3b8",
+          fontSize: "0.85rem",
+          letterSpacing: "0.08em",
+          marginBottom: "12px",
+          textTransform: "uppercase",
+        }}
+      >
+        {insightSource === "backend" ? "Backend AI insight" : "Local fallback insight"}
+      </div>
+
+      <div
+        style={{
           background: "rgba(15, 23, 42, 0.55)",
           border: "1px solid rgba(148, 163, 184, 0.12)",
           borderRadius: "18px",
@@ -185,7 +198,7 @@ function AiInsightPanel({ latestTelemetry, alerts, anomalies }) {
           padding: "18px",
         }}
       >
-        {insight.likelyIssue} {insight.processSummary}
+        {narrative}
       </div>
 
       <div
