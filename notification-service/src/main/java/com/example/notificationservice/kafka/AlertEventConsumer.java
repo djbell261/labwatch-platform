@@ -1,6 +1,7 @@
 package com.example.notificationservice.kafka;
 
 import com.example.notificationservice.dto.AlertEventMessage;
+import org.apache.kafka.clients.consumer.ConsumerRecord;
 import com.example.notificationservice.service.NotificationDispatchService;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -22,7 +23,13 @@ public class AlertEventConsumer {
             topics = "${app.kafka.topic.alert-events}",
             groupId = "${spring.kafka.consumer.group-id}"
     )
-    public void consumeAlertEvent(AlertEventMessage alertEventMessage) {
+    public void consumeAlertEvent(ConsumerRecord<String, AlertEventMessage> record) {
+        AlertEventMessage alertEventMessage = record.value();
+        if (alertEventMessage == null) {
+            log.warn("Skipping invalid alert event from Kafka because the payload could not be deserialized");
+            return;
+        }
+
         try {
             log.info(
                     "Received alert event from Kafka for machine {} severity {} status {}",

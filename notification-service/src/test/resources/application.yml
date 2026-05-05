@@ -19,6 +19,7 @@ app:
   kafka:
     topic:
       alert-events: alert-events
+      ai-investigation-events: ai-investigation-events
 
 labwatch:
   notifications:

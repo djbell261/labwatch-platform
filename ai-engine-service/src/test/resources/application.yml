@@ -25,7 +25,12 @@ logging:
 
 app:
   kafka:
+    consumer:
+      group:
+        ai-investigation: ai-investigation-group
     topic:
       auto-create-enabled: false
       health-events: health-events
+      alert-events: alert-events
+      ai-investigation-events: ai-investigation-events
       anomaly-events: anomaly-events
