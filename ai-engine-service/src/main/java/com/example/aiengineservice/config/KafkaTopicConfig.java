@@ -13,6 +13,9 @@ public class KafkaTopicConfig {
     @Value("${app.kafka.topic.anomaly-events}")
     private String anomalyEventsTopicName;
 
+    @Value("${app.kafka.topic.ai-investigation-events}")
+    private String aiInvestigationEventsTopicName;
+
     @Bean
     @ConditionalOnProperty(
             name = "app.kafka.topic.auto-create-enabled",
@@ -21,6 +24,19 @@ public class KafkaTopicConfig {
     )
     public NewTopic anomalyEventsTopic() {
         return TopicBuilder.name(anomalyEventsTopicName)
+                .partitions(3)
+                .replicas(1)
+                .build();
+    }
+
+    @Bean
+    @ConditionalOnProperty(
+            name = "app.kafka.topic.auto-create-enabled",
+            havingValue = "true",
+            matchIfMissing = true
+    )
+    public NewTopic aiInvestigationEventsTopic() {
+        return TopicBuilder.name(aiInvestigationEventsTopicName)
                 .partitions(3)
                 .replicas(1)
                 .build();

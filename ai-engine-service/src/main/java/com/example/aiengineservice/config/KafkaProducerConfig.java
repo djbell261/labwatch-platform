@@ -1,6 +1,7 @@
 package com.example.aiengineservice.config;
 
 import com.example.aiengineservice.dto.AnomalyEventMessage;
+import com.example.aiengineservice.dto.AiInvestigationEvent;
 import org.apache.kafka.clients.producer.ProducerConfig;
 import org.apache.kafka.common.serialization.StringSerializer;
 import org.springframework.beans.factory.annotation.Value;
@@ -32,5 +33,19 @@ public class KafkaProducerConfig {
     @Bean
     public KafkaTemplate<String, AnomalyEventMessage> anomalyKafkaTemplate() {
         return new KafkaTemplate<>(anomalyProducerFactory());
+    }
+
+    @Bean
+    public ProducerFactory<String, AiInvestigationEvent> aiInvestigationProducerFactory() {
+        Map<String, Object> props = new HashMap<>();
+        props.put(ProducerConfig.BOOTSTRAP_SERVERS_CONFIG, bootstrapServers);
+        props.put(ProducerConfig.KEY_SERIALIZER_CLASS_CONFIG, StringSerializer.class);
+        props.put(ProducerConfig.VALUE_SERIALIZER_CLASS_CONFIG, JsonSerializer.class);
+        return new DefaultKafkaProducerFactory<>(props);
+    }
+
+    @Bean
+    public KafkaTemplate<String, AiInvestigationEvent> aiInvestigationKafkaTemplate() {
+        return new KafkaTemplate<>(aiInvestigationProducerFactory());
     }
 }

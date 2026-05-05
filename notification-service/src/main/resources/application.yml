@@ -8,8 +8,10 @@ spring:
       group-id: ${SPRING_KAFKA_CONSUMER_GROUP_ID:notification-service-group}
       auto-offset-reset: ${SPRING_KAFKA_CONSUMER_AUTO_OFFSET_RESET:earliest}
       key-deserializer: org.apache.kafka.common.serialization.StringDeserializer
-      value-deserializer: org.springframework.kafka.support.serializer.JsonDeserializer
+      value-deserializer: org.springframework.kafka.support.serializer.ErrorHandlingDeserializer
       properties:
+        spring.deserializer:
+          value.delegate.class: org.springframework.kafka.support.serializer.JsonDeserializer
         spring:
           json:
             trusted:
@@ -20,6 +22,17 @@ spring:
             value:
               default:
                 type: com.example.notificationservice.dto.AlertEventMessage
+  mail:
+    host: ${SMTP_HOST:}
+    port: ${SMTP_PORT:587}
+    username: ${SMTP_USER:}
+    password: ${SMTP_PASSWORD:}
+    properties:
+      mail:
+        smtp:
+          auth: true
+          starttls:
+            enable: true
 
 logging:
   level:
@@ -30,10 +43,12 @@ app:
   kafka:
     topic:
       alert-events: ${ALERT_EVENTS_TOPIC:alert-events}
+      ai-investigation-events: ${AI_INVESTIGATION_EVENTS_TOPIC:ai-investigation-events}
 
 labwatch:
   notifications:
     cooldown-seconds: ${LABWATCH_NOTIFICATIONS_COOLDOWN_SECONDS:300}
     email:
       enabled: ${LABWATCH_NOTIFICATIONS_EMAIL_ENABLED:false}
-      to: ${LABWATCH_NOTIFICATIONS_EMAIL_TO:}
+      to: ${LABWATCH_ALERT_EMAIL_TO:}
+      from: ${LABWATCH_ALERT_EMAIL_FROM:labwatch@localhost}

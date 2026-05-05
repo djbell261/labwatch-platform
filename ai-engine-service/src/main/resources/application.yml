@@ -26,8 +26,10 @@ spring:
       group-id: ${SPRING_KAFKA_CONSUMER_GROUP_ID:ai-engine-group}
       auto-offset-reset: ${SPRING_KAFKA_CONSUMER_AUTO_OFFSET_RESET:earliest}
       key-deserializer: org.apache.kafka.common.serialization.StringDeserializer
-      value-deserializer: org.springframework.kafka.support.serializer.JsonDeserializer
+      value-deserializer: org.springframework.kafka.support.serializer.ErrorHandlingDeserializer
       properties:
+        spring.deserializer:
+          value.delegate.class: org.springframework.kafka.support.serializer.JsonDeserializer
         spring:
           json:
             trusted:
@@ -77,9 +79,14 @@ labwatch:
 
 app:
   kafka:
+    consumer:
+      group:
+        ai-investigation: ${AI_INVESTIGATION_CONSUMER_GROUP_ID:ai-investigation-group}
     topic:
       auto-create-enabled: ${KAFKA_TOPIC_AUTO_CREATE_ENABLED:true}
       health-events: ${HEALTH_EVENTS_TOPIC:health-events}
+      alert-events: ${ALERT_EVENTS_TOPIC:alert-events}
+      ai-investigation-events: ${AI_INVESTIGATION_EVENTS_TOPIC:ai-investigation-events}
       anomaly-events: ${ANOMALY_EVENTS_TOPIC:anomaly-events}
   anomaly:
     window-size: ${ANOMALY_WINDOW_SIZE:60}

@@ -24,6 +24,7 @@ public class NotificationProperties {
 
         private boolean enabled;
         private String to = "";
+        private String from = "labwatch@localhost";
 
         public boolean isEnabled() {
             return enabled;
@@ -39,6 +40,14 @@ public class NotificationProperties {
 
         public void setTo(String to) {
             this.to = to;
+        }
+
+        public String getFrom() {
+            return from;
+        }
+
+        public void setFrom(String from) {
+            this.from = from;
         }
     }
 }
