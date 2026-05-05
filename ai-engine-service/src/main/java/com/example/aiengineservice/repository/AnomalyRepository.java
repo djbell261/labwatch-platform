@@ -16,4 +16,8 @@ public interface AnomalyRepository extends JpaRepository<Anomaly, Long> {
     List<Anomaly> findByEventTypeOrderByDetectedAtDesc(String eventType);
 
     List<Anomaly> findByMachineIdAndEventTypeOrderByDetectedAtDesc(Long machineId, String eventType);
+
+    List<Anomaly> findByMachineIdentifierOrderByDetectedAtDesc(String machineIdentifier);
+
+    Optional<Anomaly> findFirstByMachineIdAndEventTypeOrderByDetectedAtDesc(Long machineId, String eventType);
 }

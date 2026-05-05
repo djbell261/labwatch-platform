@@ -36,8 +36,9 @@ PostgreSQL (alerts + events)
 ## Services
 
 ### monitoring-api
-- Receives telemetry via REST (`POST /api/events`)
-- Validates and persists machine health events
+- Registers machines/agents before telemetry ingestion
+- Receives telemetry via REST (`POST /api/v1/telemetry/snapshots`)
+- Optionally validates `X-Agent-Token` on ingestion
 - Publishes events to Kafka topic (`health-events`)
 
 ### alert-engine
@@ -54,6 +55,18 @@ PostgreSQL (alerts + events)
 - Publishes anomaly messages to Kafka topic `anomaly-events`
 - Persists detected anomalies in PostgreSQL
 - Exposes REST API at `GET /api/anomalies`
+
+### Multi-Device Foundation
+- Agents can register through `POST /api/v1/agents/register`
+- `monitoring-api` now tracks machines and agent records separately
+- Agent auth can be enabled with `LABWATCH_AGENT_AUTH_ENABLED=true`
+- Dashboard can switch between multiple reported machines while keeping the single-machine view intact
+
+### Account + Ownership Foundation
+- Users can register and login through `POST /api/v1/auth/register` and `POST /api/v1/auth/login`
+- JWT auth is optional and disabled by default for local development
+- Machines can remain unowned for backward compatibility, then be claimed later by a user
+- Claimed machines are filtered to their owner when auth is enabled
 
 ---
 
@@ -100,21 +113,55 @@ docker compose up --build
 | ai-engine-service | [http://localhost:8090](http://localhost:8090) |
 
 ## API Usage
-Create Health Event
+### Register Agent
 
-### POST /api/events
+`POST /api/v1/agents/register`
 
+```json
 {
   "machineIdentifier": "lab-pc-01",
-  "hostname": "lab-pc-01",
-  "location": "Room 101",
-  "eventType": "CPU",
-  "metricValue": 92.4,
-  "status": "WARNING",
-  "message": "CPU usage exceeded threshold"
+  "hostname": "lab-pc-01.local",
+  "osType": "Darwin",
+  "osVersion": "23.5.0",
+  "agentVersion": "1.0.0"
 }
+```
 
-### GET /api/alerts
+### Send Telemetry Snapshot
+
+`POST /api/v1/telemetry/snapshots`
+
+Include `X-Agent-Token` when agent auth is enabled.
+
+### List Machines
+
+`GET /api/v1/machines`
+
+### Register Account
+
+`POST /api/v1/auth/register`
+
+```json
+{
+  "email": "user@example.com",
+  "password": "password123",
+  "displayName": "Derwin"
+}
+```
+
+### Login
+
+`POST /api/v1/auth/login`
+
+### Claim Machine
+
+`POST /api/v1/machines/{machineIdentifier}/claim`
+
+Requires `Authorization: Bearer <jwt>`.
+
+### Get Alerts
+
+`GET /api/alerts`
 
 ## Example Flow
 
@@ -137,11 +184,30 @@ Create Health Event
 - Maven
 
 ## Roadmap
-- React dashboard for real-time alerts
-- Python-based monitoring agent
 - Alert severity levels (INFO / WARNING / CRITICAL)
+- Multi-user account ownership for machines
 - Observability (metrics + logging)
 - Cloud deployment (AWS)
+
+## Auth Modes
+
+### Local dev default
+- `LABWATCH_AUTH_ENABLED=false`
+- `LABWATCH_AGENT_AUTH_ENABLED=false`
+- Dashboard works without login
+- Existing unowned machines remain visible
+
+### Enable lightweight auth
+- Set `LABWATCH_AUTH_ENABLED=true`
+- Set `JWT_SECRET` to a non-default value
+- Optionally set `JWT_EXPIRATION_MINUTES`
+- Register/login in the dashboard, then claim unowned machines from the machine sidebar
+
+## Migration Notes
+
+- No manual SQL migration is required in the current dev setup because JPA is still using schema update/create-drop behavior.
+- Existing `machine` rows remain valid because ownership is nullable.
+- Existing machines will show as unowned until a logged-in user claims them.
 
 
 

@@ -1,48 +1,48 @@
 package com.example.monitoringapi.controller;
 
 import com.example.monitoringapi.dto.response.MachineResponse;
-import com.example.monitoringapi.entity.Machine;
-import com.example.monitoringapi.repository.MachineRepository;
-import org.springframework.web.bind.annotation.*;
+import com.example.monitoringapi.service.MachineService;
+import org.springframework.web.bind.annotation.DeleteMapping;
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PathVariable;
+import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RestController;
 
 import java.util.List;
-import java.util.stream.Collectors;
 
 @RestController
-@RequestMapping("/api/machines")
+@RequestMapping({"/api/machines", "/api/v1/machines"})
 public class MachineController {
 
-    private final MachineRepository machineRepository;
+    private final MachineService machineService;
 
-    public MachineController(MachineRepository machineRepository) {
-        this.machineRepository = machineRepository;
+    public MachineController(MachineService machineService) {
+        this.machineService = machineService;
     }
 
     @GetMapping
     public List<MachineResponse> getAllMachines() {
-        return machineRepository.findAll()
-                .stream()
-                .map(this::toResponse)
-                .collect(Collectors.toList());
+        return machineService.getAllMachines();
     }
 
-    @GetMapping("/{id}")
-    public MachineResponse getMachineById(@PathVariable Long id) {
-        Machine machine = machineRepository.findById(id)
-                .orElseThrow(() -> new RuntimeException("Machine not found with id " + id));
-
-        return toResponse(machine);
+    @GetMapping("/available")
+    public List<MachineResponse> getAvailableMachines() {
+        return machineService.getAvailableMachines();
     }
 
-    private MachineResponse toResponse(Machine machine) {
-        return new MachineResponse(
-                machine.getId(),
-                machine.getMachineId(),
-                machine.getHostname(),
-                machine.getLocation(),
-                machine.getStatus(),
-                machine.getLastSeen(),
-                machine.getCreatedAt()
-        );
+    @GetMapping("/{machineIdentifier}")
+    public MachineResponse getMachineByMachineIdentifier(@PathVariable String machineIdentifier) {
+        return machineService.getMachineByIdentifier(machineIdentifier);
+    }
+
+    @PostMapping("/{machineIdentifier}/claim")
+    public MachineResponse claimMachine(@PathVariable String machineIdentifier) {
+        return machineService.claimMachine(machineIdentifier);
+    }
+
+    @DeleteMapping("/{machineIdentifier}/claim")
+    public MachineResponse unclaimMachine(@PathVariable String machineIdentifier) {
+        return machineService.unclaimMachine(machineIdentifier);
     }
 }

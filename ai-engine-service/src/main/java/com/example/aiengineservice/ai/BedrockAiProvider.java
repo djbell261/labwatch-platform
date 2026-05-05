@@ -32,4 +32,14 @@ public class BedrockAiProvider implements AiProvider {
         return "Bedrock provider is selected for region " + region + " and model " + modelId
                 + ", but the current implementation is a placeholder until Bedrock request payload mapping is finalized.";
     }
+
+    @Override
+    public String generateChatResponse(String userMessage, AiInsightRequest context) {
+        if (accessKeyId == null || accessKeyId.isBlank() || secretAccessKey == null || secretAccessKey.isBlank()) {
+            throw new IllegalStateException("AWS Bedrock credentials are not configured");
+        }
+
+        return "Bedrock chat provider is selected for region " + region + " and model " + modelId
+                + ", but the current chat implementation is still a placeholder.";
+    }
 }

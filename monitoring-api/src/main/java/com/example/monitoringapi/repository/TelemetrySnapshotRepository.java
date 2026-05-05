@@ -11,7 +11,22 @@ public interface TelemetrySnapshotRepository extends JpaRepository<TelemetrySnap
 
     Page<TelemetrySnapshot> findAllByMachine_MachineId(String machineIdentifier, Pageable pageable);
 
+    Page<TelemetrySnapshot> findAllByMachine_Owner_Id(Long ownerId, Pageable pageable);
+
+    Page<TelemetrySnapshot> findAllByMachine_MachineIdAndMachine_Owner_Id(
+            String machineIdentifier,
+            Long ownerId,
+            Pageable pageable
+    );
+
     Optional<TelemetrySnapshot> findFirstByOrderByCollectedAtDescCreatedAtDesc();
 
     Optional<TelemetrySnapshot> findFirstByMachine_MachineIdOrderByCollectedAtDescCreatedAtDesc(String machineIdentifier);
+
+    Optional<TelemetrySnapshot> findFirstByMachine_Owner_IdOrderByCollectedAtDescCreatedAtDesc(Long ownerId);
+
+    Optional<TelemetrySnapshot> findFirstByMachine_MachineIdAndMachine_Owner_IdOrderByCollectedAtDescCreatedAtDesc(
+            String machineIdentifier,
+            Long ownerId
+    );
 }

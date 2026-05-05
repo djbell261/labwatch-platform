@@ -1,5 +1,7 @@
 import axios from "axios";
 
+const AUTH_STORAGE_KEY = "labwatch.auth";
+
 const monitoringApi = axios.create({
   baseURL: "http://localhost:8089",
   timeout: 8000,
@@ -13,6 +15,31 @@ const alertsApi = axios.create({
 const anomaliesApi = axios.create({
   baseURL: "http://localhost:8090",
   timeout: 8000,
+});
+
+function getStoredToken() {
+  try {
+    const rawValue = window.localStorage.getItem(AUTH_STORAGE_KEY);
+    if (!rawValue) {
+      return "";
+    }
+
+    const parsed = JSON.parse(rawValue);
+    return typeof parsed?.token === "string" ? parsed.token : "";
+  } catch {
+    return "";
+  }
+}
+
+[monitoringApi, alertsApi, anomaliesApi].forEach((client) => {
+  client.interceptors.request.use((config) => {
+    const token = getStoredToken();
+    if (token) {
+      config.headers = config.headers || {};
+      config.headers.Authorization = `Bearer ${token}`;
+    }
+    return config;
+  });
 });
 
 function extractRequestUrl(config = {}) {
@@ -45,19 +72,67 @@ function logRequestError(label, error) {
   });
 }
 
-export async function getTelemetrySnapshots() {
-  const response = await monitoringApi.get("/api/v1/telemetry/snapshots");
+export async function getTelemetrySnapshots(machineIdentifier = "") {
+  const response = await monitoringApi.get("/api/v1/telemetry/snapshots", {
+    params: machineIdentifier ? { machineIdentifier } : {},
+  });
   return Array.isArray(response.data) ? response.data : [];
 }
 
-export async function getAlerts() {
-  const response = await alertsApi.get("/api/alerts");
+export async function getMachines() {
+  const response = await monitoringApi.get("/api/v1/machines");
   return Array.isArray(response.data) ? response.data : [];
 }
 
-export async function getAnomalies() {
+export async function getAvailableMachines() {
+  const response = await monitoringApi.get("/api/v1/machines/available");
+  return Array.isArray(response.data) ? response.data : [];
+}
+
+export async function claimMachine(machineIdentifier) {
+  const response = await monitoringApi.post(`/api/v1/machines/${encodeURIComponent(machineIdentifier)}/claim`);
+  return response.data ?? null;
+}
+
+export async function unclaimMachine(machineIdentifier) {
+  const response = await monitoringApi.delete(`/api/v1/machines/${encodeURIComponent(machineIdentifier)}/claim`);
+  return response.data ?? null;
+}
+
+export async function getAuthConfig() {
+  const response = await monitoringApi.get("/api/v1/auth/config");
+  return Boolean(response.data?.enabled);
+}
+
+export async function registerUser({ email, password, displayName }) {
+  const response = await monitoringApi.post("/api/v1/auth/register", {
+    email,
+    password,
+    displayName,
+  });
+  return response.data ?? null;
+}
+
+export async function loginUser({ email, password }) {
+  const response = await monitoringApi.post("/api/v1/auth/login", {
+    email,
+    password,
+  });
+  return response.data ?? null;
+}
+
+export async function getAlerts(machineIdentifier = "") {
+  const response = await alertsApi.get("/api/alerts", {
+    params: machineIdentifier ? { machineIdentifier } : {},
+  });
+  return Array.isArray(response.data) ? response.data : [];
+}
+
+export async function getAnomalies(machineIdentifier = "") {
   try {
-    const response = await anomaliesApi.get("/api/anomalies");
+    const response = await anomaliesApi.get("/api/anomalies", {
+      params: machineIdentifier ? { machineIdentifier } : {},
+    });
     return Array.isArray(response.data) ? response.data : [];
   } catch (error) {
     logRequestError("getAnomalies", error);
@@ -65,9 +140,11 @@ export async function getAnomalies() {
   }
 }
 
-export async function getInsight() {
+export async function getInsight(machineIdentifier = "") {
   try {
-    const response = await anomaliesApi.get("/api/insight");
+    const response = await anomaliesApi.get("/api/ai/insight", {
+      params: machineIdentifier ? { machineIdentifier } : {},
+    });
     return typeof response.data === "string" ? response.data : "";
   } catch (error) {
     logRequestError("getInsight", error);
@@ -75,4 +152,29 @@ export async function getInsight() {
   }
 }
 
-export { monitoringApi, alertsApi, anomaliesApi };
+export async function getEventInsight({ timestamp, metric, value, source, machineIdentifier }) {
+  try {
+    const response = await anomaliesApi.get("/api/ai/event-insight", {
+      params: { timestamp, metric, value, source, machineIdentifier },
+    });
+    return typeof response.data === "string" ? response.data : "";
+  } catch (error) {
+    logRequestError("getEventInsight", error);
+    throw error;
+  }
+}
+
+export async function sendChatMessage(message, machineIdentifier = "") {
+  try {
+    const response = await anomaliesApi.post("/api/ai/chat", {
+      message,
+      machineIdentifier: machineIdentifier || null,
+    });
+    return typeof response.data?.response === "string" ? response.data.response : "";
+  } catch (error) {
+    logRequestError("sendChatMessage", error);
+    throw error;
+  }
+}
+
+export { AUTH_STORAGE_KEY, monitoringApi, alertsApi, anomaliesApi };

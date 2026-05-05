@@ -55,9 +55,13 @@ public class AiInsightRequestBuilder {
     }
 
     public AiInsightRequest build() {
-        TelemetrySnapshotDetailResponse latestTelemetry = fetchLatestTelemetry();
-        List<AlertResponse> alerts = fetchAlerts();
-        List<Anomaly> anomalies = fetchAnomalies();
+        return build(null, null);
+    }
+
+    public AiInsightRequest build(String authorizationHeader, String machineIdentifier) {
+        TelemetrySnapshotDetailResponse latestTelemetry = fetchLatestTelemetry(authorizationHeader, machineIdentifier);
+        List<AlertResponse> alerts = fetchAlerts(authorizationHeader, machineIdentifier);
+        List<Anomaly> anomalies = fetchAnomalies(machineIdentifier);
 
         List<AlertResponse> activeAlerts = alerts.stream()
                 .filter(alert -> "ACTIVE".equalsIgnoreCase(alert.getStatus()))
@@ -98,10 +102,48 @@ public class AiInsightRequestBuilder {
                 .build();
     }
 
-    private TelemetrySnapshotDetailResponse fetchLatestTelemetry() {
+    public AiInsightRequest buildForEvent(String timestamp, String metric, double value, String source) {
+        AiInsightRequest baseRequest = build();
+        return baseRequest.toBuilder()
+                .focusTimestamp(timestamp)
+                .focusMetric(metric)
+                .focusValue(value)
+                .focusSource(source != null && !source.isBlank() ? source : "telemetry")
+                .build();
+    }
+
+    public AiInsightRequest buildForEvent(
+            String timestamp,
+            String metric,
+            double value,
+            String source,
+            String authorizationHeader,
+            String machineIdentifier
+    ) {
+        AiInsightRequest baseRequest = build(authorizationHeader, machineIdentifier);
+        return baseRequest.toBuilder()
+                .focusTimestamp(timestamp)
+                .focusMetric(metric)
+                .focusValue(value)
+                .focusSource(source != null && !source.isBlank() ? source : "telemetry")
+                .build();
+    }
+
+    private TelemetrySnapshotDetailResponse fetchLatestTelemetry(String authorizationHeader, String machineIdentifier) {
         try {
-            TelemetrySnapshotDetailResponse telemetry = monitoringApiClient.get()
-                    .uri("/api/v1/telemetry/snapshots/latest")
+            RestClient.RequestHeadersSpec<?> request = monitoringApiClient.get()
+                    .uri(uriBuilder -> {
+                        var builder = uriBuilder.path("/api/v1/telemetry/snapshots/latest");
+                        if (machineIdentifier != null && !machineIdentifier.isBlank()) {
+                            builder = builder.queryParam("machineIdentifier", machineIdentifier);
+                        }
+                        return builder.build();
+                    });
+            if (authorizationHeader != null && !authorizationHeader.isBlank()) {
+                request = request.header("Authorization", authorizationHeader);
+            }
+
+            TelemetrySnapshotDetailResponse telemetry = request
                     .retrieve()
                     .body(TelemetrySnapshotDetailResponse.class);
 
@@ -117,10 +159,21 @@ public class AiInsightRequestBuilder {
         }
     }
 
-    private List<AlertResponse> fetchAlerts() {
+    private List<AlertResponse> fetchAlerts(String authorizationHeader, String machineIdentifier) {
         try {
-            List<AlertResponse> alerts = alertEngineClient.get()
-                    .uri("/api/alerts")
+            RestClient.RequestHeadersSpec<?> request = alertEngineClient.get()
+                    .uri(uriBuilder -> {
+                        var builder = uriBuilder.path("/api/alerts");
+                        if (machineIdentifier != null && !machineIdentifier.isBlank()) {
+                            builder = builder.queryParam("machineIdentifier", machineIdentifier);
+                        }
+                        return builder.build();
+                    });
+            if (authorizationHeader != null && !authorizationHeader.isBlank()) {
+                request = request.header("Authorization", authorizationHeader);
+            }
+
+            List<AlertResponse> alerts = request
                     .retrieve()
                     .body(ALERT_LIST_TYPE);
 
@@ -136,9 +189,11 @@ public class AiInsightRequestBuilder {
         }
     }
 
-    private List<Anomaly> fetchAnomalies() {
+    private List<Anomaly> fetchAnomalies(String machineIdentifier) {
         try {
-            List<Anomaly> anomalies = anomalyQueryService.findAll();
+            List<Anomaly> anomalies = machineIdentifier != null && !machineIdentifier.isBlank()
+                    ? anomalyQueryService.findByMachineIdentifier(machineIdentifier)
+                    : anomalyQueryService.findAll();
             if (anomalies == null) {
                 log.warn("Anomaly query returned null; using empty anomalies fallback");
                 return List.of();

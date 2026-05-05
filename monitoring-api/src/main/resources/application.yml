@@ -21,7 +21,7 @@ spring:
         dialect: ${SPRING_JPA_DATABASE_PLATFORM:org.hibernate.dialect.PostgreSQLDialect}
 
   kafka:
-    bootstrap-servers: ${KAFKA_BOOTSTRAP_SERVERS:localhost:9092}
+    bootstrap-servers: ${SPRING_KAFKA_BOOTSTRAP_SERVERS:${KAFKA_BOOTSTRAP_SERVERS:localhost:9092}}
     producer:
       key-serializer: org.apache.kafka.common.serialization.StringSerializer
       value-serializer: org.springframework.kafka.support.serializer.JsonSerializer
@@ -35,3 +35,13 @@ app:
   kafka:
     topic:
       health-events: ${HEALTH_EVENTS_TOPIC:health-events}
+
+labwatch:
+  auth:
+    enabled: ${LABWATCH_AUTH_ENABLED:false}
+  agent-auth:
+    enabled: ${LABWATCH_AGENT_AUTH_ENABLED:false}
+
+jwt:
+  secret: ${JWT_SECRET:dev-only-secret-change-me}
+  expiration-minutes: ${JWT_EXPIRATION_MINUTES:60}

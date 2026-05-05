@@ -26,6 +26,14 @@ public class Machine {
     @OneToMany(mappedBy = "machine")
     private List<HealthEvent> healthEvents;
 
+    @JsonIgnore
+    @OneToMany(mappedBy = "machine")
+    private List<Agent> agents;
+
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "owner_user_id")
+    private User owner;
+
     @Column(name = "machine_id", nullable = false, unique = true)
     private String machineId;
 

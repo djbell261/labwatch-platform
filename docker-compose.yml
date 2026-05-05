@@ -35,11 +35,19 @@ services:
     environment:
       KAFKA_BROKER_ID: 1
       KAFKA_ZOOKEEPER_CONNECT: zookeeper:2181
-      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: PLAINTEXT:PLAINTEXT,PLAINTEXT_HOST:PLAINTEXT
-      KAFKA_LISTENERS: PLAINTEXT://0.0.0.0:29092,PLAINTEXT_HOST://0.0.0.0:9092
-      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka:29092,PLAINTEXT_HOST://localhost:9092
-      KAFKA_INTER_BROKER_LISTENER_NAME: PLAINTEXT
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: INTERNAL:PLAINTEXT,EXTERNAL:PLAINTEXT
+      KAFKA_LISTENERS: INTERNAL://0.0.0.0:29092,EXTERNAL://0.0.0.0:9092
+      KAFKA_ADVERTISED_LISTENERS: INTERNAL://kafka:29092,EXTERNAL://localhost:9092
+      KAFKA_INTER_BROKER_LISTENER_NAME: INTERNAL
       KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+      KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: 1
+      KAFKA_TRANSACTION_STATE_LOG_MIN_ISR: 1
+      KAFKA_AUTO_CREATE_TOPICS_ENABLE: "true"
+    healthcheck:
+      test: ["CMD", "kafka-topics", "--bootstrap-server", "localhost:9092", "--list"]
+      interval: 10s
+      timeout: 10s
+      retries: 10
 
   monitoring-api:
     build:
@@ -49,15 +57,19 @@ services:
       postgres:
         condition: service_healthy
       kafka:
-        condition: service_started
+        condition: service_healthy
     environment:
       SERVER_PORT: 8089
       SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/${POSTGRES_DB:-labwatch}
       SPRING_DATASOURCE_USERNAME: ${POSTGRES_USER:-postgres}
       SPRING_DATASOURCE_PASSWORD: ${POSTGRES_PASSWORD:-postgres}
-      KAFKA_BOOTSTRAP_SERVERS: kafka:29092
+      SPRING_KAFKA_BOOTSTRAP_SERVERS: kafka:29092
       HEALTH_EVENTS_TOPIC: ${HEALTH_EVENTS_TOPIC:-health-events}
       SPRING_JPA_HIBERNATE_DDL_AUTO: ${SPRING_JPA_HIBERNATE_DDL_AUTO:-update}
+      LABWATCH_AUTH_ENABLED: ${LABWATCH_AUTH_ENABLED:-false}
+      LABWATCH_AGENT_AUTH_ENABLED: ${LABWATCH_AGENT_AUTH_ENABLED:-false}
+      JWT_SECRET: ${JWT_SECRET:-dev-only-secret-change-me}
+      JWT_EXPIRATION_MINUTES: ${JWT_EXPIRATION_MINUTES:-60}
     ports:
       - "8089:8089"
 
@@ -69,18 +81,33 @@ services:
       postgres:
         condition: service_healthy
       kafka:
-        condition: service_started
+        condition: service_healthy
     environment:
       SERVER_PORT: 8088
       SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/${POSTGRES_DB:-labwatch}
       SPRING_DATASOURCE_USERNAME: ${POSTGRES_USER:-postgres}
       SPRING_DATASOURCE_PASSWORD: ${POSTGRES_PASSWORD:-postgres}
-      KAFKA_BOOTSTRAP_SERVERS: kafka:29092
+      SPRING_KAFKA_BOOTSTRAP_SERVERS: kafka:29092
       HEALTH_EVENTS_TOPIC: ${HEALTH_EVENTS_TOPIC:-health-events}
+      ALERT_EVENTS_TOPIC: ${ALERT_EVENTS_TOPIC:-alert-events}
       SPRING_KAFKA_CONSUMER_GROUP_ID: ${ALERT_ENGINE_CONSUMER_GROUP_ID:-alert-engine-group}
       SPRING_JPA_HIBERNATE_DDL_AUTO: ${SPRING_JPA_HIBERNATE_DDL_AUTO:-update}
+      LABWATCH_AUTH_ENABLED: ${LABWATCH_AUTH_ENABLED:-false}
+      MONITORING_API_BASE_URL: http://monitoring-api:8089
     ports:
       - "8088:8088"
+
+  notification-service:
+    build:
+      context: ./notification-service
+    container_name: labwatch-notification-service
+    depends_on:
+      kafka:
+        condition: service_healthy
+    environment:
+      SPRING_KAFKA_BOOTSTRAP_SERVERS: kafka:29092
+      ALERT_EVENTS_TOPIC: ${ALERT_EVENTS_TOPIC:-alert-events}
+      SPRING_KAFKA_CONSUMER_GROUP_ID: ${NOTIFICATION_SERVICE_CONSUMER_GROUP_ID:-notification-service-group}
 
   ai-engine-service:
     build:
@@ -90,13 +117,13 @@ services:
       postgres:
         condition: service_healthy
       kafka:
-        condition: service_started
+        condition: service_healthy
     environment:
       SERVER_PORT: 8090
       SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/${POSTGRES_DB:-labwatch}
       SPRING_DATASOURCE_USERNAME: ${POSTGRES_USER:-postgres}
       SPRING_DATASOURCE_PASSWORD: ${POSTGRES_PASSWORD:-postgres}
-      KAFKA_BOOTSTRAP_SERVERS: kafka:29092
+      SPRING_KAFKA_BOOTSTRAP_SERVERS: kafka:29092
       HEALTH_EVENTS_TOPIC: ${HEALTH_EVENTS_TOPIC:-health-events}
       ANOMALY_EVENTS_TOPIC: ${ANOMALY_EVENTS_TOPIC:-anomaly-events}
       SPRING_KAFKA_CONSUMER_GROUP_ID: ${AI_ENGINE_CONSUMER_GROUP_ID:-ai-engine-group}
@@ -104,6 +131,10 @@ services:
       ANOMALY_WINDOW_SIZE: ${ANOMALY_WINDOW_SIZE:-10}
       ANOMALY_MINIMUM_SAMPLES: ${ANOMALY_MINIMUM_SAMPLES:-5}
       ANOMALY_Z_SCORE_THRESHOLD: ${ANOMALY_Z_SCORE_THRESHOLD:-2.5}
+      AI_PROVIDER: ${AI_PROVIDER}
+      OPENAI_API_KEY: ${OPENAI_API_KEY}
+      OPENAI_MODEL: ${OPENAI_MODEL}
+      LABWATCH_AUTH_ENABLED: ${LABWATCH_AUTH_ENABLED:-false}
     ports:
       - "8090:8090"
 

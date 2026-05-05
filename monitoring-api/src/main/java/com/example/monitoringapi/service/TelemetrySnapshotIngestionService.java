@@ -13,6 +13,7 @@ import com.example.monitoringapi.kafka.HealthEventProducer;
 import com.example.monitoringapi.repository.HealthEventRepository;
 import com.example.monitoringapi.repository.TelemetrySnapshotRepository;
 import com.example.monitoringapi.exception.ResourceNotFoundException;
+import com.example.monitoringapi.security.CurrentUserService;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -36,30 +37,37 @@ public class TelemetrySnapshotIngestionService {
     );
 
     private final MachineService machineService;
+    private final AgentService agentService;
     private final TelemetrySnapshotRepository telemetrySnapshotRepository;
     private final HealthEventRepository healthEventRepository;
     private final HealthEventProducer healthEventProducer;
     private final ObjectMapper objectMapper;
     private final SimpMessagingTemplate messagingTemplate;
+    private final CurrentUserService currentUserService;
 
     public TelemetrySnapshotIngestionService(
             MachineService machineService,
+            AgentService agentService,
             TelemetrySnapshotRepository telemetrySnapshotRepository,
             HealthEventRepository healthEventRepository,
             HealthEventProducer healthEventProducer,
             ObjectMapper objectMapper,
-            SimpMessagingTemplate messagingTemplate
+            SimpMessagingTemplate messagingTemplate,
+            CurrentUserService currentUserService
     ) {
         this.machineService = machineService;
+        this.agentService = agentService;
         this.telemetrySnapshotRepository = telemetrySnapshotRepository;
         this.healthEventRepository = healthEventRepository;
         this.healthEventProducer = healthEventProducer;
         this.objectMapper = objectMapper;
         this.messagingTemplate = messagingTemplate;
+        this.currentUserService = currentUserService;
     }
 
     @Transactional
-    public TelemetrySnapshotResponse ingestSnapshot(TelemetrySnapshotRequest request) {
+    public TelemetrySnapshotResponse ingestSnapshot(TelemetrySnapshotRequest request, String agentToken) {
+        agentService.validateTelemetryAccess(request.getMachineIdentifier(), agentToken);
         Machine machine = machineService.getOrCreateMachine(request);
 
         TelemetrySnapshot snapshot = new TelemetrySnapshot();
@@ -96,9 +104,21 @@ public class TelemetrySnapshotIngestionService {
     public List<TelemetrySnapshotDetailResponse> getRecentSnapshots(String machineIdentifier) {
         PageRequest pageRequest = PageRequest.of(0, DEFAULT_RECENT_LIMIT, RECENT_SNAPSHOT_SORT);
 
-        List<TelemetrySnapshot> snapshots = isBlank(machineIdentifier)
-                ? telemetrySnapshotRepository.findAll(pageRequest).getContent()
-                : telemetrySnapshotRepository.findAllByMachine_MachineId(machineIdentifier.trim(), pageRequest).getContent();
+        List<TelemetrySnapshot> snapshots;
+        if (currentUserService.isAuthEnabled()) {
+            Long ownerId = currentUserService.getRequiredUser().getId();
+            snapshots = isBlank(machineIdentifier)
+                    ? telemetrySnapshotRepository.findAllByMachine_Owner_Id(ownerId, pageRequest).getContent()
+                    : telemetrySnapshotRepository.findAllByMachine_MachineIdAndMachine_Owner_Id(
+                            machineIdentifier.trim(),
+                            ownerId,
+                            pageRequest
+                    ).getContent();
+        } else {
+            snapshots = isBlank(machineIdentifier)
+                    ? telemetrySnapshotRepository.findAll(pageRequest).getContent()
+                    : telemetrySnapshotRepository.findAllByMachine_MachineId(machineIdentifier.trim(), pageRequest).getContent();
+        }
 
         return snapshots.stream()
                 .map(this::toDetailResponse)
@@ -107,13 +127,27 @@ public class TelemetrySnapshotIngestionService {
 
     @Transactional(readOnly = true)
     public TelemetrySnapshotDetailResponse getLatestSnapshot(String machineIdentifier) {
-        TelemetrySnapshot snapshot = isBlank(machineIdentifier)
-                ? telemetrySnapshotRepository.findFirstByOrderByCollectedAtDescCreatedAtDesc()
-                .orElseThrow(() -> new ResourceNotFoundException("No telemetry snapshots found"))
-                : telemetrySnapshotRepository.findFirstByMachine_MachineIdOrderByCollectedAtDescCreatedAtDesc(machineIdentifier.trim())
-                .orElseThrow(() -> new ResourceNotFoundException(
-                        "No telemetry snapshots found for machineIdentifier " + machineIdentifier
-                ));
+        TelemetrySnapshot snapshot;
+        if (currentUserService.isAuthEnabled()) {
+            Long ownerId = currentUserService.getRequiredUser().getId();
+            snapshot = isBlank(machineIdentifier)
+                    ? telemetrySnapshotRepository.findFirstByMachine_Owner_IdOrderByCollectedAtDescCreatedAtDesc(ownerId)
+                    .orElseThrow(() -> new ResourceNotFoundException("No telemetry snapshots found"))
+                    : telemetrySnapshotRepository.findFirstByMachine_MachineIdAndMachine_Owner_IdOrderByCollectedAtDescCreatedAtDesc(
+                            machineIdentifier.trim(),
+                            ownerId
+                    ).orElseThrow(() -> new ResourceNotFoundException(
+                            "No telemetry snapshots found for machineIdentifier " + machineIdentifier
+                    ));
+        } else {
+            snapshot = isBlank(machineIdentifier)
+                    ? telemetrySnapshotRepository.findFirstByOrderByCollectedAtDescCreatedAtDesc()
+                    .orElseThrow(() -> new ResourceNotFoundException("No telemetry snapshots found"))
+                    : telemetrySnapshotRepository.findFirstByMachine_MachineIdOrderByCollectedAtDescCreatedAtDesc(machineIdentifier.trim())
+                    .orElseThrow(() -> new ResourceNotFoundException(
+                            "No telemetry snapshots found for machineIdentifier " + machineIdentifier
+                    ));
+        }
 
         return toDetailResponse(snapshot);
     }

@@ -28,4 +28,6 @@ logging:
 app:
   kafka:
     topic:
+      auto-create-enabled: false
+      alert-events: alert-events
       health-events: health-events

@@ -1,0 +1,23 @@
+spring:
+  kafka:
+    bootstrap-servers: localhost:9092
+    consumer:
+      group-id: notification-service-test-group
+    listener:
+      auto-startup: false
+
+logging:
+  level:
+    root: WARN
+
+app:
+  kafka:
+    topic:
+      alert-events: alert-events
+
+labwatch:
+  notifications:
+    cooldown-seconds: 300
+    email:
+      enabled: false
+      to: test@example.com

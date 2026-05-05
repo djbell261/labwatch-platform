@@ -54,6 +54,7 @@ export function buildChartData(telemetryHistory) {
       id: snapshot.snapshotId || snapshot.id,
       timestamp: snapshot.timestamp || snapshot.createdAt,
       time: formatChartTime(snapshot.timestamp || snapshot.createdAt),
+      chartKey: `telemetry-${snapshot.timestamp || snapshot.createdAt}`,
       cpuUsage: Number(snapshot.cpuUsage ?? 0),
       memoryUsage: Number(snapshot.memoryUsage ?? 0),
       diskUsage: Number(snapshot.diskUsage ?? 0),
@@ -123,6 +124,7 @@ export function buildAlertMarkers(chartData, alerts) {
 
       return {
         id: alert.id || `${alert.alertType}-${alert.createdAt}`,
+        eventKey: `alert-${alert.alertType}-${alert.createdAt}`,
         type: "alert",
         metricType: alert.alertType,
         severity: alert.severity || "UNKNOWN",
@@ -322,6 +324,7 @@ function createAnomalyMarker({ anomaly, matchedPoint, idSuffix, fallback, timeDi
       anomaly.id ||
       anomaly.anomalyId ||
       `${anomaly.metricType}-${anomaly.resolvedTimestampValue}-${idSuffix}`,
+    eventKey: `anomaly-${anomaly.metricType}-${anomaly.resolvedTimestampValue}-${idSuffix}`,
     type: "anomaly",
     metricType: anomaly.metricType,
     severity: anomaly.severity || "MEDIUM",

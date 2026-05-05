@@ -21,7 +21,7 @@ spring:
         dialect: ${SPRING_JPA_DATABASE_PLATFORM:org.hibernate.dialect.PostgreSQLDialect}
 
   kafka:
-    bootstrap-servers: ${KAFKA_BOOTSTRAP_SERVERS:localhost:9092}
+    bootstrap-servers: ${SPRING_KAFKA_BOOTSTRAP_SERVERS:${KAFKA_BOOTSTRAP_SERVERS:localhost:9092}}
     consumer:
       group-id: ${SPRING_KAFKA_CONSUMER_GROUP_ID:alert-engine-group}
       auto-offset-reset: ${SPRING_KAFKA_CONSUMER_AUTO_OFFSET_RESET:earliest}
@@ -38,6 +38,9 @@ spring:
             value:
               default:
                 type: com.example.alertengine.dto.HealthEventMessage
+    producer:
+      key-serializer: org.apache.kafka.common.serialization.StringSerializer
+      value-serializer: org.springframework.kafka.support.serializer.JsonSerializer
 
 logging:
   level:
@@ -47,4 +50,17 @@ logging:
 app:
   kafka:
     topic:
+      auto-create-enabled: ${KAFKA_TOPIC_AUTO_CREATE_ENABLED:true}
       health-events: ${HEALTH_EVENTS_TOPIC:health-events}
+      alert-events: ${ALERT_EVENTS_TOPIC:alert-events}
+
+labwatch:
+  auth:
+    enabled: ${LABWATCH_AUTH_ENABLED:false}
+
+services:
+  monitoring-api:
+    base-url: ${MONITORING_API_BASE_URL:http://monitoring-api:8089}
+  http:
+    connect-timeout-ms: ${SERVICES_HTTP_CONNECT_TIMEOUT_MS:2000}
+    read-timeout-ms: ${SERVICES_HTTP_READ_TIMEOUT_MS:3000}

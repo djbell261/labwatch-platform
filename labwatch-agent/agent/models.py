@@ -34,3 +34,34 @@ class TelemetrySnapshot:
     @staticmethod
     def current_local_iso() -> str:
         return datetime.now().replace(microsecond=0).isoformat()
+
+
+@dataclass
+class AgentRegistration:
+    machineIdentifier: str
+    hostname: str
+    osType: str
+    osVersion: str
+    agentVersion: str
+
+    def to_dict(self) -> dict:
+        return asdict(self)
+
+
+@dataclass
+class AgentRegistrationResponse:
+    agentId: str
+    agentToken: str
+    machineIdentifier: str
+    registeredAt: str
+
+
+@dataclass
+class AgentState:
+    machineIdentifier: str
+    agentId: str
+    agentToken: str
+    registeredAt: str
+
+    def to_dict(self) -> dict:
+        return asdict(self)

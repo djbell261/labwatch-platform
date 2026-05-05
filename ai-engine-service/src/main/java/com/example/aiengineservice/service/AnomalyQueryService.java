@@ -42,4 +42,8 @@ public class AnomalyQueryService {
                 eventType.trim().toUpperCase()
         );
     }
+
+    public List<Anomaly> findByMachineIdentifier(String machineIdentifier) {
+        return anomalyRepository.findByMachineIdentifierOrderByDetectedAtDesc(machineIdentifier.trim());
+    }
 }

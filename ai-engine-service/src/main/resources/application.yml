@@ -21,7 +21,7 @@ spring:
         dialect: ${SPRING_JPA_DATABASE_PLATFORM:org.hibernate.dialect.PostgreSQLDialect}
 
   kafka:
-    bootstrap-servers: ${KAFKA_BOOTSTRAP_SERVERS:localhost:9092}
+    bootstrap-servers: ${SPRING_KAFKA_BOOTSTRAP_SERVERS:${KAFKA_BOOTSTRAP_SERVERS:localhost:9092}}
     consumer:
       group-id: ${SPRING_KAFKA_CONSUMER_GROUP_ID:ai-engine-group}
       auto-offset-reset: ${SPRING_KAFKA_CONSUMER_AUTO_OFFSET_RESET:earliest}
@@ -50,6 +50,7 @@ logging:
 ai:
   provider: ${AI_PROVIDER:openai}
   openai:
+    api-key: ${OPENAI_API_KEY:}
     model: ${OPENAI_MODEL:gpt-4o-mini}
     base-url: ${OPENAI_BASE_URL:https://api.openai.com}
   bedrock:
@@ -64,6 +65,16 @@ services:
     connect-timeout-ms: ${SERVICES_HTTP_CONNECT_TIMEOUT_MS:2000}
     read-timeout-ms: ${SERVICES_HTTP_READ_TIMEOUT_MS:3000}
 
+labwatch:
+  auth:
+    enabled: ${LABWATCH_AUTH_ENABLED:false}
+  ai:
+    anomaly:
+      min-baseline-seconds: ${LABWATCH_AI_ANOMALY_MIN_BASELINE_SECONDS:60}
+      min-sample-size: ${LABWATCH_AI_ANOMALY_MIN_SAMPLE_SIZE:20}
+      z-score-threshold: ${LABWATCH_AI_ANOMALY_Z_SCORE_THRESHOLD:3.0}
+      cooldown-seconds: ${LABWATCH_AI_ANOMALY_COOLDOWN_SECONDS:120}
+
 app:
   kafka:
     topic:
@@ -71,6 +82,4 @@ app:
       health-events: ${HEALTH_EVENTS_TOPIC:health-events}
       anomaly-events: ${ANOMALY_EVENTS_TOPIC:anomaly-events}
   anomaly:
-    window-size: ${ANOMALY_WINDOW_SIZE:10}
-    minimum-samples: ${ANOMALY_MINIMUM_SAMPLES:5}
-    z-score-threshold: ${ANOMALY_Z_SCORE_THRESHOLD:2.5}
+    window-size: ${ANOMALY_WINDOW_SIZE:60}

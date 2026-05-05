@@ -3,6 +3,7 @@ package com.example.monitoringapi.controller;
 import com.example.monitoringapi.dto.request.TelemetrySnapshotRequest;
 import com.example.monitoringapi.dto.response.TelemetrySnapshotDetailResponse;
 import com.example.monitoringapi.dto.response.TelemetrySnapshotResponse;
+import com.example.monitoringapi.service.AgentService;
 import com.example.monitoringapi.service.TelemetrySnapshotIngestionService;
 import jakarta.validation.Valid;
 import org.springframework.http.HttpStatus;
@@ -11,6 +12,7 @@ import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestController;
 
@@ -42,7 +44,10 @@ public class TelemetrySnapshotController {
 
     @PostMapping
     @ResponseStatus(HttpStatus.CREATED)
-    public TelemetrySnapshotResponse createSnapshot(@Valid @RequestBody TelemetrySnapshotRequest request) {
-        return telemetrySnapshotIngestionService.ingestSnapshot(request);
+    public TelemetrySnapshotResponse createSnapshot(
+            @RequestHeader(value = AgentService.AGENT_TOKEN_HEADER, required = false) String agentToken,
+            @Valid @RequestBody TelemetrySnapshotRequest request
+    ) {
+        return telemetrySnapshotIngestionService.ingestSnapshot(request, agentToken);
     }
 }

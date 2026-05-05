@@ -9,6 +9,7 @@ from agent.collector import TelemetryCollector
 from agent.config import AgentConfig
 from agent.logging_config import configure_logging
 from agent.runner import AgentRunner
+from agent.state import AgentStateStore
 
 
 def main() -> int:
@@ -38,13 +39,17 @@ def main() -> int:
         max_retries=config.max_retries,
         max_backoff_seconds=config.max_backoff_seconds,
     )
+    state_store = AgentStateStore(config.agent_state_path)
     runner = AgentRunner(
         collector,
         client,
+        state_store,
         interval_seconds=config.collection_interval_seconds,
+        agent_version=config.agent_version,
     )
 
     if args.once:
+        runner.ensure_registered()
         runner.run_once()
         return 0
 

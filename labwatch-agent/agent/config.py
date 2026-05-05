@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import os
 from dataclasses import dataclass
+from pathlib import Path
 
 from dotenv import load_dotenv
 
@@ -13,6 +14,8 @@ class AgentConfig:
     api_url: str
     machine_identifier: str
     collection_interval_seconds: int
+    agent_version: str
+    agent_state_path: Path
     request_timeout_seconds: float = 10.0
     max_retries: int = 3
     max_backoff_seconds: float = 30.0
@@ -32,10 +35,14 @@ class AgentConfig:
         if interval <= 0:
             raise ValueError("COLLECTION_INTERVAL_SECONDS must be greater than 0")
 
+        state_path = Path(os.getenv("LABWATCH_AGENT_STATE_PATH", "agent_state.json")).expanduser()
+
         return cls(
             api_url=api_url.rstrip("/"),
             machine_identifier=machine_identifier,
             collection_interval_seconds=interval,
+            agent_version=os.getenv("LABWATCH_AGENT_VERSION", "1.0.0").strip() or "1.0.0",
+            agent_state_path=state_path,
             request_timeout_seconds=float(os.getenv("REQUEST_TIMEOUT_SECONDS", "10")),
             max_retries=int(os.getenv("MAX_RETRIES", "3")),
             max_backoff_seconds=float(os.getenv("MAX_BACKOFF_SECONDS", "30")),

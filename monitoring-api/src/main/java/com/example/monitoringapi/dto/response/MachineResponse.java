@@ -16,9 +16,13 @@ public class MachineResponse {
     private Long id;
     private String machineIdentifier;
     private String hostname;
-    private String location;
+    private String osType;
+    private String osVersion;
     private String status;
-    private LocalDateTime lastSeen;
+    private LocalDateTime lastSeenAt;
+    private Integer agentCount;
+    private boolean owned;
+    private String ownerUserId;
+    private String ownerDisplayName;
     private LocalDateTime createdAt;
-
-    }
+}

@@ -26,3 +26,13 @@ app:
     topic:
       auto-create-enabled: false
       health-events: health-events
+
+labwatch:
+  auth:
+    enabled: false
+  agent-auth:
+    enabled: false
+
+jwt:
+  secret: test-secret-for-monitoring-api-suite-123456
+  expiration-minutes: 60

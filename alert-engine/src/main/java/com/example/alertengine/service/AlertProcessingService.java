@@ -1,7 +1,9 @@
 package com.example.alertengine.service;
 
+import com.example.alertengine.dto.AlertEventMessage;
 import com.example.alertengine.dto.HealthEventMessage;
 import com.example.alertengine.entity.Alert;
+import com.example.alertengine.kafka.AlertEventProducer;
 import com.example.alertengine.repository.AlertRepository;
 import org.springframework.stereotype.Service;
 
@@ -15,9 +17,11 @@ public class AlertProcessingService {
     private static final long MIN_ACTIVE_DURATION_SECONDS = 60;
 
     private final AlertRepository alertRepository;
+    private final AlertEventProducer alertEventProducer;
 
-    public AlertProcessingService(AlertRepository alertRepository) {
+    public AlertProcessingService(AlertRepository alertRepository, AlertEventProducer alertEventProducer) {
         this.alertRepository = alertRepository;
+        this.alertEventProducer = alertEventProducer;
     }
 
     public void processHealthEvent(HealthEventMessage eventMessage) {
@@ -96,7 +100,8 @@ public class AlertProcessingService {
         alert.setStatus("ACTIVE");
         alert.setCreatedAt(LocalDateTime.now());
 
-        alertRepository.save(alert);
+        Alert savedAlert = alertRepository.save(alert);
+        alertEventProducer.publish(toAlertEventMessage(savedAlert, eventMessage));
 
         System.out.println(
                 "Created ACTIVE alert for machine " +
@@ -163,5 +168,18 @@ public class AlertProcessingService {
         if (eventMessage.getEventType() == null || eventMessage.getEventType().isBlank()) {
             throw new RuntimeException("Event type is required");
         }
+    }
+
+    private AlertEventMessage toAlertEventMessage(Alert alert, HealthEventMessage eventMessage) {
+        return new AlertEventMessage(
+                alert.getId(),
+                alert.getMachineIdentifier(),
+                alert.getHostname(),
+                alert.getAlertType(),
+                alert.getSeverity(),
+                alert.getStatus(),
+                eventMessage.getMetricValue() != null ? eventMessage.getMetricValue().doubleValue() : null,
+                alert.getCreatedAt()
+        );
     }
 }

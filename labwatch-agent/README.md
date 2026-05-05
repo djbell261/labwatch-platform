@@ -7,6 +7,8 @@
 - CPU, memory, and disk usage collection
 - Hostname, OS type/version, and uptime collection
 - Top process metrics collection
+- Agent registration on startup
+- Local agent token persistence for future runs
 - One-shot mode for quick verification
 - Continuous mode for interval-based monitoring
 - Retry with exponential backoff on API failures
@@ -65,10 +67,22 @@ Required:
 
 Optional:
 
+- `LABWATCH_AGENT_VERSION`
+- `LABWATCH_AGENT_STATE_PATH`
 - `REQUEST_TIMEOUT_SECONDS`
 - `MAX_RETRIES`
 - `MAX_BACKOFF_SECONDS`
 - `TOP_PROCESS_COUNT`
+
+## Registration Flow
+
+On first startup, the agent registers with:
+
+`POST /api/v1/agents/register`
+
+It stores the returned token in `agent_state.json` by default and reuses that token on future runs. Telemetry snapshots then include:
+
+`X-Agent-Token: <token>`
 
 ## Target Endpoint
 

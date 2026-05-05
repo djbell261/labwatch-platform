@@ -9,7 +9,7 @@ import java.time.LocalDateTime;
 import java.util.List;
 
 @Data
-@Builder
+@Builder(toBuilder = true)
 @NoArgsConstructor
 @AllArgsConstructor
 public class AiInsightRequest {
@@ -21,6 +21,10 @@ public class AiInsightRequest {
     private AnomaliesSummary anomalies;
     private TopProcessSummary topProcess;
     private LocalDateTime timestamp;
+    private String focusTimestamp;
+    private String focusMetric;
+    private Double focusValue;
+    private String focusSource;
 
     @Data
     @Builder
