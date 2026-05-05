@@ -20,6 +20,17 @@ spring:
             value:
               default:
                 type: com.example.notificationservice.dto.AlertEventMessage
+  mail:
+    host: ${SMTP_HOST:}
+    port: ${SMTP_PORT:587}
+    username: ${SMTP_USER:}
+    password: ${SMTP_PASSWORD:}
+    properties:
+      mail:
+        smtp:
+          auth: true
+          starttls:
+            enable: true
 
 logging:
   level:
@@ -36,4 +47,5 @@ labwatch:
     cooldown-seconds: ${LABWATCH_NOTIFICATIONS_COOLDOWN_SECONDS:300}
     email:
       enabled: ${LABWATCH_NOTIFICATIONS_EMAIL_ENABLED:false}
-      to: ${LABWATCH_NOTIFICATIONS_EMAIL_TO:}
+      to: ${LABWATCH_ALERT_EMAIL_TO:}
+      from: ${LABWATCH_ALERT_EMAIL_FROM:labwatch@localhost}

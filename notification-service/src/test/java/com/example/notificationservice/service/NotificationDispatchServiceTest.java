@@ -2,11 +2,17 @@ package com.example.notificationservice.service;
 
 import com.example.notificationservice.config.NotificationProperties;
 import com.example.notificationservice.dto.AlertEventMessage;
+import com.example.notificationservice.service.channel.EmailNotificationChannel;
 import com.example.notificationservice.service.channel.NotificationChannel;
 import com.example.notificationservice.service.cooldown.InMemoryNotificationCooldownStore;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.springframework.boot.autoconfigure.mail.MailProperties;
+import org.springframework.mail.MailSendException;
+import org.springframework.mail.SimpleMailMessage;
+import org.springframework.mail.javamail.JavaMailSender;
 
+import java.io.InputStream;
 import java.time.Clock;
 import java.time.Instant;
 import java.time.LocalDateTime;
@@ -15,6 +21,7 @@ import java.time.ZoneOffset;
 import java.util.ArrayList;
 import java.util.List;
 
+import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 
 class NotificationDispatchServiceTest {
@@ -28,13 +35,10 @@ class NotificationDispatchServiceTest {
         clock = new MutableClock(Instant.parse("2026-05-05T13:00:00Z"), ZoneOffset.UTC);
         notificationChannel = new RecordingNotificationChannel();
 
-        NotificationProperties notificationProperties = new NotificationProperties();
-        notificationProperties.setCooldownSeconds(300);
-
         notificationDispatchService = new NotificationDispatchService(
                 List.of(notificationChannel),
                 new InMemoryNotificationCooldownStore(),
-                notificationProperties,
+                notificationProperties(),
                 clock
         );
     }
@@ -100,6 +104,42 @@ class NotificationDispatchServiceTest {
         assertEquals(4, notificationChannel.dispatchedAlerts.size());
     }
 
+    @Test
+    void consoleChannelStillDispatchesWhenEmailFails() {
+        NotificationProperties notificationProperties = notificationProperties();
+        notificationProperties.getEmail().setEnabled(true);
+        notificationProperties.getEmail().setTo("alerts@example.com");
+        notificationProperties.getEmail().setFrom("labwatch@localhost");
+
+        MailProperties mailProperties = new MailProperties();
+        mailProperties.setHost("smtp.example.com");
+
+        RecordingNotificationChannel consoleChannel = new RecordingNotificationChannel();
+        NotificationChannel emailChannel = new EmailNotificationChannel(
+                notificationProperties,
+                new FailingMailSender(),
+                mailProperties
+        );
+
+        notificationDispatchService = new NotificationDispatchService(
+                List.of(emailChannel, consoleChannel),
+                new InMemoryNotificationCooldownStore(),
+                notificationProperties,
+                clock
+        );
+
+        assertDoesNotThrow(() ->
+                notificationDispatchService.dispatchAlertNotification(alert("machine-a", "CPU", "HIGH", "ACTIVE"))
+        );
+        assertEquals(1, consoleChannel.dispatchedAlerts.size());
+    }
+
+    private NotificationProperties notificationProperties() {
+        NotificationProperties notificationProperties = new NotificationProperties();
+        notificationProperties.setCooldownSeconds(300);
+        return notificationProperties;
+    }
+
     private AlertEventMessage alert(String machineIdentifier, String alertType, String severity, String status) {
         return new AlertEventMessage(
                 1L,
@@ -125,6 +165,49 @@ class NotificationDispatchServiceTest {
         @Override
         public String channelName() {
             return "RecordingNotificationChannel";
+        }
+    }
+
+    private static final class FailingMailSender implements JavaMailSender {
+
+        @Override
+        public void send(SimpleMailMessage simpleMessage) {
+            throw new MailSendException("smtp failure");
+        }
+
+        @Override
+        public void send(SimpleMailMessage... simpleMessages) {
+            throw new MailSendException("smtp failure");
+        }
+
+        @Override
+        public jakarta.mail.internet.MimeMessage createMimeMessage() {
+            return null;
+        }
+
+        @Override
+        public jakarta.mail.internet.MimeMessage createMimeMessage(InputStream contentStream) {
+            return null;
+        }
+
+        @Override
+        public void send(jakarta.mail.internet.MimeMessage mimeMessage) {
+            throw new MailSendException("smtp failure");
+        }
+
+        @Override
+        public void send(jakarta.mail.internet.MimeMessage... mimeMessages) {
+            throw new MailSendException("smtp failure");
+        }
+
+        @Override
+        public void send(org.springframework.mail.javamail.MimeMessagePreparator mimeMessagePreparator) {
+            throw new MailSendException("smtp failure");
+        }
+
+        @Override
+        public void send(org.springframework.mail.javamail.MimeMessagePreparator... mimeMessagePreparators) {
+            throw new MailSendException("smtp failure");
         }
     }
 

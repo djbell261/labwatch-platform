@@ -43,6 +43,12 @@
             <artifactId>spring-kafka</artifactId>
         </dependency>
 
+        <!-- SMTP email delivery -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-mail</artifactId>
+        </dependency>
+
         <!-- JSON/Jackson support for Kafka JsonDeserializer -->
         <dependency>
             <groupId>org.springframework.boot</groupId>

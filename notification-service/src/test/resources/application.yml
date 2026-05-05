@@ -5,6 +5,11 @@ spring:
       group-id: notification-service-test-group
     listener:
       auto-startup: false
+  mail:
+    host: ""
+    port: 587
+    username: ""
+    password: ""
 
 logging:
   level:
@@ -21,3 +26,4 @@ labwatch:
     email:
       enabled: false
       to: test@example.com
+      from: labwatch@localhost
