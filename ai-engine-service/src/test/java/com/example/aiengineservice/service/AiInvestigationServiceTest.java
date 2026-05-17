@@ -6,8 +6,10 @@ import com.example.aiengineservice.dto.AiInvestigationEvent;
 import com.example.aiengineservice.dto.AlertEventMessage;
 import com.example.aiengineservice.dto.external.ProcessMetricResponse;
 import com.example.aiengineservice.dto.external.TelemetrySnapshotDetailResponse;
+import com.example.aiengineservice.entity.AiInvestigationEntity;
 import com.example.aiengineservice.entity.Anomaly;
 import com.example.aiengineservice.kafka.AiInvestigationEventProducer;
+import com.example.aiengineservice.repository.AiInvestigationRepository;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
@@ -20,10 +22,16 @@ import java.util.UUID;
 
 import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.doThrow;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.when;
 
 class AiInvestigationServiceTest {
 
     private RecordingAiInvestigationEventProducer producer;
+    private AiInvestigationRepository repository;
     private StubAiProvider aiProvider;
     private StubAiInsightRequestBuilder aiInsightRequestBuilder;
     private StubAiInvestigationContextBuilder contextBuilder;
@@ -32,6 +40,8 @@ class AiInvestigationServiceTest {
     @BeforeEach
     void setUp() {
         producer = new RecordingAiInvestigationEventProducer();
+        repository = mock(AiInvestigationRepository.class);
+        when(repository.save(any(AiInvestigationEntity.class))).thenAnswer(invocation -> invocation.getArgument(0));
         aiProvider = new StubAiProvider();
         aiInsightRequestBuilder = new StubAiInsightRequestBuilder();
         contextBuilder = new StubAiInvestigationContextBuilder();
@@ -40,6 +50,7 @@ class AiInvestigationServiceTest {
                 aiInsightRequestBuilder,
                 contextBuilder,
                 producer,
+                repository,
                 Clock.fixed(Instant.parse("2026-05-05T14:00:00Z"), ZoneOffset.UTC)
         );
     }
@@ -71,6 +82,7 @@ class AiInvestigationServiceTest {
         aiInvestigationService.processAlertEvent(alert("HIGH", "ACTIVE"));
 
         assertEquals(1, producer.events.size());
+        verify(repository).save(any(AiInvestigationEntity.class));
         assertEquals("AI summary", producer.events.get(0).getSummary());
     }
 
@@ -89,6 +101,7 @@ class AiInvestigationServiceTest {
         aiInvestigationService.processAlertEvent(alert("HIGH", "ACTIVE"));
 
         assertEquals(1, producer.events.size());
+        verify(repository).save(any(AiInvestigationEntity.class));
         AiInvestigationEvent event = producer.events.get(0);
         assertEquals("LOW", event.getConfidence());
         assertEquals("Insufficient AI context available to determine a precise root cause.", event.getLikelyCause());
@@ -102,6 +115,14 @@ class AiInvestigationServiceTest {
         assertEquals(0, producer.events.size());
     }
 
+    @Test
+    void persistenceFailureDoesNotStopKafkaPublish() {
+        doThrow(new RuntimeException("persist failed")).when(repository).save(any(AiInvestigationEntity.class));
+
+        assertDoesNotThrow(() -> aiInvestigationService.processAlertEvent(alert("HIGH", "ACTIVE")));
+        assertEquals(1, producer.events.size());
+    }
+
     private AlertEventMessage alert(String severity, String status) {
         return new AlertEventMessage(
                 42L,
@@ -111,6 +132,9 @@ class AiInvestigationServiceTest {
                 severity,
                 status,
                 92.4,
+                null,
+                null,
+                null,
                 LocalDateTime.of(2026, 5, 5, 13, 32)
         );
     }

@@ -149,6 +149,9 @@ class NotificationDispatchServiceTest {
                 severity,
                 status,
                 95.0,
+                null,
+                null,
+                null,
                 LocalDateTime.ofInstant(clock.instant(), clock.getZone())
         );
     }

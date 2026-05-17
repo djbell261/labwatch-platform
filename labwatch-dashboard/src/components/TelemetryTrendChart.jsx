@@ -19,6 +19,11 @@ import {
   normalizeAnomaly,
 } from "./telemetryChartUtils";
 
+function formatPercentValue(value) {
+  const numericValue = Number(value);
+  return Number.isFinite(numericValue) ? `${numericValue.toFixed(1)}%` : "--";
+}
+
 function getAlertMarkerStyle(marker, isSelected) {
   const isActive = marker.status === "ACTIVE";
 
@@ -326,7 +331,14 @@ function LoadingChart() {
 }
 
 function EmptyChartState({ message }) {
-  return <div className="empty-state">{message}</div>;
+  return (
+    <div className="empty-state telemetry-empty-state">
+      <div>
+        <div className="section-title" style={{ marginBottom: "8px" }}>{message}</div>
+        <div className="machine-card-subtle">LabWatch needs a little more telemetry before it can draw reliable trends.</div>
+      </div>
+    </div>
+  );
 }
 
 function buildEventSummary(alertMarkers, anomalyMarkers) {
@@ -480,6 +492,38 @@ function TelemetryTrendChart({
     () => buildEventLookup(persistentAlertMarkers, persistentAnomalyMarkers),
     [persistentAlertMarkers, persistentAnomalyMarkers]
   );
+  const showNoAnomaliesHint =
+    !loading &&
+    !anomaliesLoading &&
+    !anomaliesError &&
+    chartData.length >= 2 &&
+    eventVisibility.anomalies &&
+    persistentAnomalyMarkers.length === 0;
+  const latestPoint = chartData[chartData.length - 1] || null;
+  const previousPoint = chartData[chartData.length - 2] || null;
+  const trendItems = [
+    {
+      key: "cpuUsage",
+      label: "CPU",
+      value: latestPoint?.cpuUsage,
+      previousValue: previousPoint?.cpuUsage,
+      color: metricMeta.CPU.color,
+    },
+    {
+      key: "memoryUsage",
+      label: "Memory",
+      value: latestPoint?.memoryUsage,
+      previousValue: previousPoint?.memoryUsage,
+      color: metricMeta.MEMORY.color,
+    },
+    {
+      key: "diskUsage",
+      label: "Disk",
+      value: latestPoint?.diskUsage,
+      previousValue: previousPoint?.diskUsage,
+      color: metricMeta.DISK.color,
+    },
+  ];
 
   return (
     <section className="surface-card section-card">
@@ -537,75 +581,106 @@ function TelemetryTrendChart({
         <LegendItem color="#a855f7" label="Purple diamond = Anomaly" shape="diamond" />
       </div>
 
+      <div className="telemetry-stat-row">
+        {trendItems.map((item) => {
+          const delta = Number(item.value) - Number(item.previousValue);
+          const hasDelta = Number.isFinite(delta);
+
+          return (
+            <div key={item.key} className="telemetry-stat-card">
+              <div className="telemetry-stat-top">
+                <span className="metric-swatch" style={{ background: item.color }} />
+                <span className="card-label">{item.label}</span>
+              </div>
+              <div className="telemetry-stat-value">{formatPercentValue(item.value)}</div>
+              <div className="telemetry-stat-delta">
+                {hasDelta ? `${delta >= 0 ? "+" : ""}${delta.toFixed(1)} pts vs previous sample` : "Waiting for comparison"}
+              </div>
+            </div>
+          );
+        })}
+      </div>
+
       {loading ? (
         <LoadingChart />
       ) : chartData.length < 2 ? (
-        <EmptyChartState message="No data" />
+        <EmptyChartState message="Not enough telemetry yet" />
       ) : (
-        <div className="chart-frame">
-          <ResponsiveContainer height={360} width="100%">
-            <LineChart data={chartData} margin={{ top: 10, right: 14, left: -12, bottom: 4 }}>
-              <CartesianGrid stroke="rgba(148, 163, 184, 0.08)" strokeDasharray="3 3" vertical={false} />
-              <XAxis dataKey="time" stroke="#8ea0b8" tick={{ fill: "#8ea0b8", fontSize: 12 }} tickMargin={10} axisLine={false} tickLine={false} />
-              <YAxis
-                axisLine={false}
-                tick={{ fill: "#8ea0b8", fontSize: 12 }}
-                tickLine={false}
-                tickMargin={8}
-                stroke="#8ea0b8"
-                domain={[0, 100]}
-              />
-              <Tooltip content={<CustomTooltip eventLookup={eventLookup} onExplainSpike={onExplainSpike} />} />
+        <>
+          <div className="chart-frame">
+            <ResponsiveContainer height={320} width="100%">
+              <LineChart data={chartData} margin={{ top: 10, right: 14, left: -12, bottom: 4 }}>
+                <CartesianGrid stroke="rgba(148, 163, 184, 0.08)" strokeDasharray="3 3" vertical={false} />
+                <XAxis dataKey="time" stroke="#8ea0b8" tick={{ fill: "#8ea0b8", fontSize: 12 }} tickMargin={10} axisLine={false} tickLine={false} />
+                <YAxis
+                  axisLine={false}
+                  tick={{ fill: "#8ea0b8", fontSize: 12 }}
+                  tickLine={false}
+                  tickMargin={8}
+                  stroke="#8ea0b8"
+                  domain={[0, 100]}
+                />
+                <Tooltip content={<CustomTooltip eventLookup={eventLookup} onExplainSpike={onExplainSpike} />} />
 
-              {verticalEventLines.map((event) => (
-                <ReferenceLine
-                  key={`line-${event.id}`}
-                  x={event.x}
-                  stroke={event.type === "anomaly" ? "rgba(168, 85, 247, 0.24)" : event.status === "ACTIVE" ? "rgba(239, 68, 68, 0.22)" : "rgba(148, 163, 184, 0.18)"}
-                  strokeDasharray="3 4"
-                  ifOverflow="visible"
-                />
-              ))}
+                {verticalEventLines.map((event) => (
+                  <ReferenceLine
+                    key={`line-${event.id}`}
+                    x={event.x}
+                    stroke={event.type === "anomaly" ? "rgba(168, 85, 247, 0.24)" : event.status === "ACTIVE" ? "rgba(239, 68, 68, 0.22)" : "rgba(148, 163, 184, 0.18)"}
+                    strokeDasharray="3 4"
+                    ifOverflow="visible"
+                  />
+                ))}
 
-              {selectedMetrics.includes(metricMeta.CPU.key) ? (
-                <Line
-                  type="monotone"
-                  dataKey={metricMeta.CPU.key}
-                  name={metricMeta.CPU.label}
-                  stroke={metricMeta.CPU.color}
-                  strokeWidth={2.8}
-                  dot={false}
-                  activeDot={(props) => <TelemetryActiveDot {...props} onExplainSpike={onExplainSpike} />}
-                />
-              ) : null}
-              {selectedMetrics.includes(metricMeta.MEMORY.key) ? (
-                <Line
-                  type="monotone"
-                  dataKey={metricMeta.MEMORY.key}
-                  name={metricMeta.MEMORY.label}
-                  stroke={metricMeta.MEMORY.color}
-                  strokeWidth={2.8}
-                  dot={false}
-                  activeDot={(props) => <TelemetryActiveDot {...props} onExplainSpike={onExplainSpike} />}
-                />
-              ) : null}
-              {selectedMetrics.includes(metricMeta.DISK.key) ? (
-                <Line
-                  type="monotone"
-                  dataKey={metricMeta.DISK.key}
-                  name={metricMeta.DISK.label}
-                  stroke={metricMeta.DISK.color}
-                  strokeWidth={2.8}
-                  dot={false}
-                  activeDot={(props) => <TelemetryActiveDot {...props} onExplainSpike={onExplainSpike} />}
-                />
-              ) : null}
+                {selectedMetrics.includes(metricMeta.CPU.key) ? (
+                  <Line
+                    type="monotone"
+                    dataKey={metricMeta.CPU.key}
+                    name={metricMeta.CPU.label}
+                    stroke={metricMeta.CPU.color}
+                    strokeWidth={3.2}
+                    dot={false}
+                    connectNulls
+                    activeDot={(props) => <TelemetryActiveDot {...props} onExplainSpike={onExplainSpike} />}
+                  />
+                ) : null}
+                {selectedMetrics.includes(metricMeta.MEMORY.key) ? (
+                  <Line
+                    type="monotone"
+                    dataKey={metricMeta.MEMORY.key}
+                    name={metricMeta.MEMORY.label}
+                    stroke={metricMeta.MEMORY.color}
+                    strokeWidth={3.2}
+                    dot={false}
+                    connectNulls
+                    activeDot={(props) => <TelemetryActiveDot {...props} onExplainSpike={onExplainSpike} />}
+                  />
+                ) : null}
+                {selectedMetrics.includes(metricMeta.DISK.key) ? (
+                  <Line
+                    type="monotone"
+                    dataKey={metricMeta.DISK.key}
+                    name={metricMeta.DISK.label}
+                    stroke={metricMeta.DISK.color}
+                    strokeWidth={3.2}
+                    dot={false}
+                    connectNulls
+                    activeDot={(props) => <TelemetryActiveDot {...props} onExplainSpike={onExplainSpike} />}
+                  />
+                ) : null}
 
-              {persistentAlertMarkers.map((marker) => renderAlertMarker(marker, onExplainSpike, selectedEventKey))}
-              {persistentAnomalyMarkers.map((marker) => renderAnomalyMarker(marker, onExplainSpike, selectedEventKey))}
-            </LineChart>
-          </ResponsiveContainer>
-        </div>
+                {persistentAlertMarkers.map((marker) => renderAlertMarker(marker, onExplainSpike, selectedEventKey))}
+                {persistentAnomalyMarkers.map((marker) => renderAnomalyMarker(marker, onExplainSpike, selectedEventKey))}
+              </LineChart>
+            </ResponsiveContainer>
+          </div>
+
+          {showNoAnomaliesHint ? (
+            <div className="machine-card-subtle" style={{ marginTop: "12px" }}>
+              No anomalies detected yet — system may still be learning
+            </div>
+          ) : null}
+        </>
       )}
 
       {eventSummary.length > 0 ? (

@@ -5,8 +5,10 @@ import com.example.aiengineservice.ai.AiProvider;
 import com.example.aiengineservice.dto.AiInvestigationEvent;
 import com.example.aiengineservice.dto.AlertEventMessage;
 import com.example.aiengineservice.dto.external.ProcessMetricResponse;
+import com.example.aiengineservice.entity.AiInvestigationEntity;
 import com.example.aiengineservice.entity.Anomaly;
 import com.example.aiengineservice.kafka.AiInvestigationEventProducer;
+import com.example.aiengineservice.repository.AiInvestigationRepository;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
@@ -28,6 +30,7 @@ public class AiInvestigationService {
     private final AiInsightRequestBuilder aiInsightRequestBuilder;
     private final AiInvestigationContextBuilder contextBuilder;
     private final AiInvestigationEventProducer aiInvestigationEventProducer;
+    private final AiInvestigationRepository aiInvestigationRepository;
     private final Clock clock;
 
     public AiInvestigationService(
@@ -35,12 +38,14 @@ public class AiInvestigationService {
             AiInsightRequestBuilder aiInsightRequestBuilder,
             AiInvestigationContextBuilder contextBuilder,
             AiInvestigationEventProducer aiInvestigationEventProducer,
+            AiInvestigationRepository aiInvestigationRepository,
             Clock clock
     ) {
         this.aiProvider = aiProvider;
         this.aiInsightRequestBuilder = aiInsightRequestBuilder;
         this.contextBuilder = contextBuilder;
         this.aiInvestigationEventProducer = aiInvestigationEventProducer;
+        this.aiInvestigationRepository = aiInvestigationRepository;
         this.clock = clock;
     }
 
@@ -58,11 +63,22 @@ public class AiInvestigationService {
         }
 
         AiInvestigationEvent aiInvestigationEvent = generateInvestigation(alertEventMessage);
+        persistInvestigation(aiInvestigationEvent);
         try {
             log.info("Publishing AI investigation event");
             aiInvestigationEventProducer.publish(aiInvestigationEvent);
         } catch (Exception exception) {
             log.error("Failed to publish AI investigation event", exception);
+        }
+    }
+
+    private void persistInvestigation(AiInvestigationEvent aiInvestigationEvent) {
+        try {
+            log.info("Persisting AI investigation");
+            aiInvestigationRepository.save(toEntity(aiInvestigationEvent));
+            log.info("AI investigation persisted successfully");
+        } catch (Exception exception) {
+            log.error("Failed to persist AI investigation", exception);
         }
     }
 
@@ -210,5 +226,24 @@ public class AiInvestigationService {
 
     private String formatCreatedAt(LocalDateTime createdAt) {
         return createdAt == null ? "unknown" : createdAt.atOffset(ZoneOffset.UTC).toInstant().toString();
+    }
+
+    private AiInvestigationEntity toEntity(AiInvestigationEvent aiInvestigationEvent) {
+        return new AiInvestigationEntity(
+                null,
+                aiInvestigationEvent.getInvestigationId() != null ? aiInvestigationEvent.getInvestigationId().toString() : null,
+                aiInvestigationEvent.getAlertId() != null ? String.valueOf(aiInvestigationEvent.getAlertId()) : "unknown",
+                fallback(aiInvestigationEvent.getMachineIdentifier()),
+                fallback(aiInvestigationEvent.getAlertType()),
+                fallback(aiInvestigationEvent.getSeverity()),
+                fallback(aiInvestigationEvent.getSummary()),
+                fallback(aiInvestigationEvent.getLikelyCause()),
+                fallback(aiInvestigationEvent.getRecommendedAction()),
+                fallback(aiInvestigationEvent.getConfidence()),
+                aiInvestigationEvent.getCreatedAt() != null
+                        ? aiInvestigationEvent.getCreatedAt()
+                        : LocalDateTime.ofInstant(clock.instant(), ZoneOffset.UTC),
+                LocalDateTime.ofInstant(clock.instant(), ZoneOffset.UTC)
+        );
     }
 }

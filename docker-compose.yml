@@ -7,7 +7,7 @@ services:
       POSTGRES_USER: ${POSTGRES_USER:-postgres}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-postgres}
     ports:
-      - "${POSTGRES_PORT:-5434}:5432"
+      - "${POSTGRES_PORT:-5435}:5432"
     volumes:
       - postgres-data:/var/lib/postgresql/data
     healthcheck:
@@ -105,6 +105,7 @@ services:
       kafka:
         condition: service_healthy
     environment:
+      SERVER_PORT: 8091
       SPRING_KAFKA_BOOTSTRAP_SERVERS: kafka:29092
       ALERT_EVENTS_TOPIC: ${ALERT_EVENTS_TOPIC:-alert-events}
       AI_INVESTIGATION_EVENTS_TOPIC: ${AI_INVESTIGATION_EVENTS_TOPIC:-ai-investigation-events}
@@ -116,6 +117,8 @@ services:
       SMTP_PORT: "587"
       SMTP_USER: ""
       SMTP_PASSWORD: ""
+    ports:
+      - "8091:8091"
 
   ai-engine-service:
     build:
@@ -141,6 +144,8 @@ services:
       ANOMALY_WINDOW_SIZE: ${ANOMALY_WINDOW_SIZE:-10}
       ANOMALY_MINIMUM_SAMPLES: ${ANOMALY_MINIMUM_SAMPLES:-5}
       ANOMALY_Z_SCORE_THRESHOLD: ${ANOMALY_Z_SCORE_THRESHOLD:-2.5}
+      LABWATCH_AI_ANOMALY_PROMOTION_ENABLED: ${LABWATCH_AI_ANOMALY_PROMOTION_ENABLED:-true}
+      LABWATCH_AI_ANOMALY_PROMOTION_COOLDOWN_SECONDS: ${LABWATCH_AI_ANOMALY_PROMOTION_COOLDOWN_SECONDS:-300}
       AI_PROVIDER: ${AI_PROVIDER}
       OPENAI_API_KEY: ${OPENAI_API_KEY}
       OPENAI_MODEL: ${OPENAI_MODEL}
@@ -148,5 +153,36 @@ services:
     ports:
       - "8090:8090"
 
+  prometheus:
+    image: prom/prometheus:v2.54.1
+    container_name: labwatch-prometheus
+    depends_on:
+      monitoring-api:
+        condition: service_started
+      alert-engine:
+        condition: service_started
+      ai-engine-service:
+        condition: service_started
+      notification-service:
+        condition: service_started
+    command:
+      - --config.file=/etc/prometheus/prometheus.yml
+    volumes:
+      - ./prometheus.yml:/etc/prometheus/prometheus.yml:ro
+    ports:
+      - "9091:9090"
+
+  grafana:
+    image: grafana/grafana:11.1.4
+    container_name: labwatch-grafana
+    depends_on:
+      prometheus:
+        condition: service_started
+    volumes:
+      - grafana-data:/var/lib/grafana
+    ports:
+      - "3001:3000"
+
 volumes:
   postgres-data:
+  grafana-data:

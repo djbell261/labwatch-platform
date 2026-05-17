@@ -1,10 +1,13 @@
 package com.example.aiengineservice.service;
 
+import com.example.aiengineservice.dto.AlertEventMessage;
 import com.example.aiengineservice.dto.AnomalyDetectionResult;
 import com.example.aiengineservice.dto.AnomalyEventMessage;
+import com.example.aiengineservice.dto.AnomalyPromotedAlertEvent;
 import com.example.aiengineservice.dto.HealthEventMessage;
 import com.example.aiengineservice.entity.Anomaly;
 import com.example.aiengineservice.kafka.AnomalyEventProducer;
+import com.example.aiengineservice.kafka.AnomalyPromotedAlertProducer;
 import com.example.aiengineservice.repository.AnomalyRepository;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -27,30 +30,43 @@ public class AnomalyDetectionService {
     private final Map<String, Deque<Double>> rollingWindows = new ConcurrentHashMap<>();
     private final Map<Long, LocalDateTime> machineFirstSeenAt = new ConcurrentHashMap<>();
     private final Map<String, Boolean> detectionActivated = new ConcurrentHashMap<>();
+    private final Map<String, LocalDateTime> lastPromotionAt = new ConcurrentHashMap<>();
     private final AnomalyRepository anomalyRepository;
     private final AnomalyEventProducer anomalyEventProducer;
+    private final AnomalyPromotedAlertProducer anomalyPromotedAlertProducer;
     private final int rollingWindowSize;
     private final int minimumSampleSize;
     private final long minimumBaselineSeconds;
     private final double zScoreThreshold;
     private final long anomalyCooldownSeconds;
+    private final boolean debugMode;
+    private final boolean promotionEnabled;
+    private final long promotionCooldownSeconds;
 
     public AnomalyDetectionService(
             AnomalyRepository anomalyRepository,
             AnomalyEventProducer anomalyEventProducer,
+            AnomalyPromotedAlertProducer anomalyPromotedAlertProducer,
             @Value("${app.anomaly.window-size:10}") int rollingWindowSize,
             @Value("${labwatch.ai.anomaly.min-sample-size:20}") int minimumSampleSize,
             @Value("${labwatch.ai.anomaly.min-baseline-seconds:60}") long minimumBaselineSeconds,
             @Value("${labwatch.ai.anomaly.z-score-threshold:3.0}") double zScoreThreshold,
-            @Value("${labwatch.ai.anomaly.cooldown-seconds:120}") long anomalyCooldownSeconds
+            @Value("${labwatch.ai.anomaly.cooldown-seconds:120}") long anomalyCooldownSeconds,
+            @Value("${labwatch.ai.anomaly.debug-mode:false}") boolean debugMode,
+            @Value("${labwatch.ai.anomaly.promotion-enabled:true}") boolean promotionEnabled,
+            @Value("${labwatch.ai.anomaly.promotion-cooldown-seconds:300}") long promotionCooldownSeconds
     ) {
         this.anomalyRepository = anomalyRepository;
         this.anomalyEventProducer = anomalyEventProducer;
+        this.anomalyPromotedAlertProducer = anomalyPromotedAlertProducer;
         this.rollingWindowSize = rollingWindowSize;
         this.minimumSampleSize = minimumSampleSize;
         this.minimumBaselineSeconds = minimumBaselineSeconds;
         this.zScoreThreshold = zScoreThreshold;
         this.anomalyCooldownSeconds = anomalyCooldownSeconds;
+        this.debugMode = debugMode;
+        this.promotionEnabled = promotionEnabled;
+        this.promotionCooldownSeconds = promotionCooldownSeconds;
     }
 
     public void processHealthEvent(HealthEventMessage eventMessage) {
@@ -77,14 +93,16 @@ public class AnomalyDetectionService {
         logDetectionActivated(windowKey, eventMessage, observedAt, detectionResult.getSampleSize());
 
         if (!detectionResult.isAnomalous()) {
+            logThresholdSkip(eventMessage, detectionResult);
             return;
         }
 
         if (isCoolingDown(eventMessage.getMachineId(), eventType, observedAt)) {
-            log.warn(
-                    "Skipping anomaly for machine {} metric {} because cooldown is still active.",
+            log.info(
+                    "Skipping anomaly due to cooldown for machine {} metric {} (cooldownSeconds={}).",
                     eventMessage.getMachineIdentifier(),
-                    eventType
+                    eventType,
+                    anomalyCooldownSeconds
             );
             return;
         }
@@ -117,8 +135,18 @@ public class AnomalyDetectionService {
         anomaly.setMessage(message);
         anomaly.setDetectedAt(detectedAt);
 
+        log.info(
+                "Anomaly detected for machine {} metric {} (value={}, baseline={}, zScore={}, threshold={}).",
+                eventMessage.getMachineIdentifier(),
+                eventType,
+                metricValue,
+                detectionResult.getRollingAverage(),
+                round(detectionResult.getZScore()),
+                round(resolveEffectiveZScoreThreshold())
+        );
         anomalyRepository.save(anomaly);
         anomalyEventProducer.publish(toEventMessage(anomaly));
+        promoteAnomalyIfNeeded(anomaly);
     }
 
     private AnomalyDetectionResult detect(double currentValue, Deque<Double> window) {
@@ -135,11 +163,31 @@ public class AnomalyDetectionService {
         double standardDeviation = Math.sqrt(variance);
 
         if (standardDeviation == 0.0d) {
+            if (debugMode) {
+                log.info(
+                        "Calculated z-score: {} for currentValue={} with baseline={} and standardDeviation={} (sampleSize={}).",
+                        0.0,
+                        currentValue,
+                        round(average),
+                        round(standardDeviation),
+                        sampleSize
+                );
+            }
             return new AnomalyDetectionResult(false, average, standardDeviation, 0.0, sampleSize);
         }
 
         double zScore = (currentValue - average) / standardDeviation;
-        boolean anomalous = Math.abs(zScore) >= zScoreThreshold;
+        if (debugMode) {
+            log.info(
+                    "Calculated z-score: {} for currentValue={} with baseline={} and standardDeviation={} (sampleSize={}).",
+                    round(zScore),
+                    currentValue,
+                    round(average),
+                    round(standardDeviation),
+                    sampleSize
+            );
+        }
+        boolean anomalous = Math.abs(zScore) >= resolveEffectiveZScoreThreshold();
         return new AnomalyDetectionResult(anomalous, average, standardDeviation, zScore, sampleSize);
     }
 
@@ -159,7 +207,7 @@ public class AnomalyDetectionService {
         }
 
         log.info(
-                "Machine {} metric {} still warming up for anomaly detection (baselineAgeSeconds={}, sampleSize={}, requiredBaselineSeconds={}, requiredSampleSize={}).",
+                "Warming up anomaly detection for machine {} metric {} (baselineAgeSeconds={}, sampleSize={}, requiredBaselineSeconds={}, requiredSampleSize={}).",
                 eventMessage.getMachineIdentifier(),
                 eventMessage.getEventType(),
                 baselineAgeSeconds,
@@ -187,13 +235,36 @@ public class AnomalyDetectionService {
         ).getSeconds());
 
         log.info(
-                "Anomaly detection is now active for machine {} metric {} (baselineAgeSeconds={}, sampleSize={}, zScoreThreshold={}).",
+                "Baseline ready, anomaly detection active for machine {} metric {} (baselineAgeSeconds={}, sampleSize={}, zScoreThreshold={}).",
                 eventMessage.getMachineIdentifier(),
                 eventMessage.getEventType(),
                 baselineAgeSeconds,
                 sampleSize,
-                zScoreThreshold
+                round(resolveEffectiveZScoreThreshold())
         );
+    }
+
+    private void logThresholdSkip(HealthEventMessage eventMessage, AnomalyDetectionResult detectionResult) {
+        if (!debugMode) {
+            return;
+        }
+
+        log.info(
+                "Skipping anomaly due to threshold for machine {} metric {} (zScore={}, threshold={}, sampleSize={}).",
+                eventMessage.getMachineIdentifier(),
+                eventMessage.getEventType(),
+                round(detectionResult.getZScore()),
+                round(resolveEffectiveZScoreThreshold()),
+                detectionResult.getSampleSize()
+        );
+    }
+
+    private double resolveEffectiveZScoreThreshold() {
+        return debugMode ? Math.min(zScoreThreshold, 1.5d) : zScoreThreshold;
+    }
+
+    private double round(double value) {
+        return Math.round(value * 100.0d) / 100.0d;
     }
 
     private boolean isCoolingDown(Long machineId, String eventType, LocalDateTime detectedAt) {
@@ -225,16 +296,96 @@ public class AnomalyDetectionService {
     }
 
     private String determineSeverity(double absoluteZScore) {
-        if (absoluteZScore >= 4.0) {
-            return "CRITICAL";
-        }
-        if (absoluteZScore >= 3.5) {
+        if (absoluteZScore >= 3.0) {
             return "HIGH";
         }
-        if (absoluteZScore >= 3.0) {
+        if (absoluteZScore >= 2.0) {
             return "MEDIUM";
         }
         return "LOW";
+    }
+
+    private void promoteAnomalyIfNeeded(Anomaly anomaly) {
+        if (!promotionEnabled) {
+            return;
+        }
+
+        String severity = normalize(anomaly.getSeverity());
+        if (!"HIGH".equals(severity)) {
+            log.info("Skipping anomaly promotion because severity is LOW/MEDIUM");
+            return;
+        }
+
+        String promotionKey = buildPromotionKey(anomaly);
+        if (isPromotionCoolingDown(promotionKey, anomaly.getDetectedAt())) {
+            log.info("Skipping anomaly promotion due to cooldown");
+            return;
+        }
+
+        AnomalyPromotedAlertEvent promotedAlertEvent = toPromotedAlertEvent(anomaly);
+        AlertEventMessage alertEventMessage = toAlertEventMessage(promotedAlertEvent);
+
+        try {
+            log.info(
+                    "Promoting HIGH anomaly to alert event for machine {} metric {}",
+                    anomaly.getMachineIdentifier(),
+                    anomaly.getEventType()
+            );
+            anomalyPromotedAlertProducer.publish(alertEventMessage);
+            lastPromotionAt.put(promotionKey, anomaly.getDetectedAt());
+        } catch (Exception exception) {
+            log.error("Failed to publish promoted anomaly alert", exception);
+        }
+    }
+
+    private boolean isPromotionCoolingDown(String promotionKey, LocalDateTime detectedAt) {
+        LocalDateTime previousPromotionAt = lastPromotionAt.get(promotionKey);
+        if (previousPromotionAt == null || detectedAt == null) {
+            return false;
+        }
+
+        long secondsSincePrevious = Math.max(0, Duration.between(previousPromotionAt, detectedAt).getSeconds());
+        return secondsSincePrevious < promotionCooldownSeconds;
+    }
+
+    private String buildPromotionKey(Anomaly anomaly) {
+        return String.join("|", normalize(anomaly.getMachineIdentifier()), normalize(anomaly.getEventType()));
+    }
+
+    private AnomalyPromotedAlertEvent toPromotedAlertEvent(Anomaly anomaly) {
+        return new AnomalyPromotedAlertEvent(
+                generateAlertId(anomaly),
+                anomaly.getAnomalyId() != null ? anomaly.getAnomalyId().toString() : null,
+                anomaly.getMachineIdentifier(),
+                anomaly.getHostname(),
+                anomaly.getEventType(),
+                "HIGH",
+                "ACTIVE",
+                anomaly.getMetricValue(),
+                anomaly.getZScore(),
+                anomaly.getMessage(),
+                anomaly.getDetectedAt()
+        );
+    }
+
+    private AlertEventMessage toAlertEventMessage(AnomalyPromotedAlertEvent promotedAlertEvent) {
+        return new AlertEventMessage(
+                promotedAlertEvent.getAlertId(),
+                promotedAlertEvent.getMachineIdentifier(),
+                promotedAlertEvent.getHostname(),
+                promotedAlertEvent.getAlertType(),
+                promotedAlertEvent.getSeverity(),
+                promotedAlertEvent.getStatus(),
+                promotedAlertEvent.getMetricValue(),
+                promotedAlertEvent.getAnomalyId(),
+                promotedAlertEvent.getZScore(),
+                promotedAlertEvent.getMessage(),
+                promotedAlertEvent.getCreatedAt()
+        );
+    }
+
+    private long generateAlertId(Anomaly anomaly) {
+        return Math.abs(UUID.randomUUID().getMostSignificantBits());
     }
 
     private AnomalyEventMessage toEventMessage(Anomaly anomaly) {
@@ -279,5 +430,9 @@ public class AnomalyDetectionService {
 
     private String defaultString(String value) {
         return value == null || value.isBlank() ? "unknown" : value;
+    }
+
+    private String normalize(String value) {
+        return value == null ? "" : value.trim().toUpperCase();
     }
 }
