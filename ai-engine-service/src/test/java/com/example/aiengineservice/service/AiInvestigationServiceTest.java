@@ -132,6 +132,9 @@ class AiInvestigationServiceTest {
                 severity,
                 status,
                 92.4,
+                null,
+                null,
+                null,
                 LocalDateTime.of(2026, 5, 5, 13, 32)
         );
     }

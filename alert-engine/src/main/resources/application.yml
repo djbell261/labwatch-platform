@@ -47,6 +47,18 @@ logging:
     root: ${LOGGING_LEVEL_ROOT:INFO}
     org.springframework: ${LOGGING_LEVEL_ORG_SPRINGFRAMEWORK:INFO}
 
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,metrics,prometheus
+  endpoint:
+    health:
+      show-details: always
+  metrics:
+    tags:
+      application: ${spring.application.name}
+
 app:
   kafka:
     topic:

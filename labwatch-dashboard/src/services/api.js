@@ -128,6 +128,13 @@ export async function getAlerts(machineIdentifier = "") {
   return Array.isArray(response.data) ? response.data : [];
 }
 
+export async function getActiveAlerts(machineIdentifier = "") {
+  const response = await alertsApi.get("/api/alerts/active", {
+    params: machineIdentifier ? { machineIdentifier } : {},
+  });
+  return Array.isArray(response.data) ? response.data : [];
+}
+
 export async function getAnomalies(machineIdentifier = "") {
   try {
     const response = await anomaliesApi.get("/api/anomalies", {
@@ -136,6 +143,39 @@ export async function getAnomalies(machineIdentifier = "") {
     return Array.isArray(response.data) ? response.data : [];
   } catch (error) {
     logRequestError("getAnomalies", error);
+    throw error;
+  }
+}
+
+export async function getAnomalyById(anomalyId) {
+  try {
+    const response = await anomaliesApi.get(`/api/anomalies/${encodeURIComponent(anomalyId)}`);
+    return response.data ?? null;
+  } catch (error) {
+    logRequestError("getAnomalyById", error);
+    throw error;
+  }
+}
+
+export async function getRecentInvestigations(machineIdentifier = "") {
+  try {
+    const endpoint = machineIdentifier
+      ? `/api/investigations/machine/${encodeURIComponent(machineIdentifier)}`
+      : "/api/investigations";
+    const response = await anomaliesApi.get(endpoint);
+    return Array.isArray(response.data) ? response.data : [];
+  } catch (error) {
+    logRequestError("getRecentInvestigations", error);
+    throw error;
+  }
+}
+
+export async function getInvestigationsByAlertId(alertId) {
+  try {
+    const response = await anomaliesApi.get(`/api/investigations/alert/${encodeURIComponent(alertId)}`);
+    return Array.isArray(response.data) ? response.data : [];
+  } catch (error) {
+    logRequestError("getInvestigationsByAlertId", error);
     throw error;
   }
 }

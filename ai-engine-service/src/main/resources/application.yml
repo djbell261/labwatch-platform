@@ -49,6 +49,18 @@ logging:
     root: ${LOGGING_LEVEL_ROOT:INFO}
     org.springframework: ${LOGGING_LEVEL_ORG_SPRINGFRAMEWORK:INFO}
 
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,metrics,prometheus
+  endpoint:
+    health:
+      show-details: always
+  metrics:
+    tags:
+      application: ${spring.application.name}
+
 ai:
   provider: ${AI_PROVIDER:openai}
   openai:
@@ -72,10 +84,13 @@ labwatch:
     enabled: ${LABWATCH_AUTH_ENABLED:false}
   ai:
     anomaly:
-      min-baseline-seconds: ${LABWATCH_AI_ANOMALY_MIN_BASELINE_SECONDS:60}
-      min-sample-size: ${LABWATCH_AI_ANOMALY_MIN_SAMPLE_SIZE:20}
-      z-score-threshold: ${LABWATCH_AI_ANOMALY_Z_SCORE_THRESHOLD:3.0}
-      cooldown-seconds: ${LABWATCH_AI_ANOMALY_COOLDOWN_SECONDS:120}
+      min-baseline-seconds: ${LABWATCH_AI_ANOMALY_MIN_BASELINE_SECONDS:10}
+      min-sample-size: ${LABWATCH_AI_ANOMALY_MIN_SAMPLE_SIZE:5}
+      z-score-threshold: ${LABWATCH_AI_ANOMALY_Z_SCORE_THRESHOLD:1.5}
+      cooldown-seconds: ${LABWATCH_AI_ANOMALY_COOLDOWN_SECONDS:30}
+      debug-mode: ${LABWATCH_AI_ANOMALY_DEBUG_MODE:true}
+      promotion-enabled: ${LABWATCH_AI_ANOMALY_PROMOTION_ENABLED:true}
+      promotion-cooldown-seconds: ${LABWATCH_AI_ANOMALY_PROMOTION_COOLDOWN_SECONDS:300}
 
 app:
   kafka:

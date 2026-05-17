@@ -1,6 +1,8 @@
 import { useEffect, useMemo, useState } from "react";
 import AiInsightPanel from "../components/AiInsightPanel";
 import ChatAssistant from "../components/ChatAssistant";
+import LatestAnomaliesPanel from "../components/LatestAnomaliesPanel";
+import RecentIncidentsPanel from "../components/RecentIncidentsPanel";
 import TelemetryTrendChart from "../components/TelemetryTrendChart";
 import { buildInsightModel } from "../components/aiInsightModel";
 import { useAuth } from "../context/AuthContext";
@@ -10,6 +12,7 @@ import {
   getAnomalies,
   getAvailableMachines,
   getInsight,
+  getRecentInvestigations,
   getMachines,
   getTelemetrySnapshots,
   sendChatMessage,
@@ -314,7 +317,7 @@ function ConfirmModal({ open, machineIdentifier, onCancel, onConfirm }) {
   );
 }
 
-function Dashboard() {
+function Dashboard({ onOpenIncident = () => {} }) {
   const { authEnabled, user, logout } = useAuth();
   const [activePage, setActivePage] = useState("overview");
   const [machines, setMachines] = useState([]);
@@ -324,16 +327,19 @@ function Dashboard() {
   const [telemetryHistory, setTelemetryHistory] = useState([]);
   const [alerts, setAlerts] = useState([]);
   const [anomalies, setAnomalies] = useState([]);
+  const [recentInvestigations, setRecentInvestigations] = useState([]);
   const [insightSource, setInsightSource] = useState("backend");
   const [selectedEventKey, setSelectedEventKey] = useState("");
   const [chatTriggerMessage, setChatTriggerMessage] = useState(null);
   const [telemetryLoading, setTelemetryLoading] = useState(true);
   const [alertsLoading, setAlertsLoading] = useState(true);
   const [anomaliesLoading, setAnomaliesLoading] = useState(true);
+  const [investigationsLoading, setInvestigationsLoading] = useState(true);
   const [insightLoading, setInsightLoading] = useState(true);
   const [telemetryError, setTelemetryError] = useState("");
   const [alertsError, setAlertsError] = useState("");
   const [anomaliesError, setAnomaliesError] = useState("");
+  const [investigationsError, setInvestigationsError] = useState("");
   const [insightError, setInsightError] = useState("");
   const [claimError, setClaimError] = useState("");
   const [toast, setToast] = useState(null);
@@ -541,6 +547,29 @@ function Dashboard() {
     }
   };
 
+  const refreshInvestigations = async (isMountedRef, machineIdentifier = selectedMachineIdentifier) => {
+    setInvestigationsLoading(true);
+    try {
+      const investigationsResponse = await getRecentInvestigations(machineIdentifier);
+      if (!isMountedRef.current) {
+        return;
+      }
+      setRecentInvestigations(investigationsResponse);
+      setInvestigationsError("");
+    } catch (error) {
+      if (!isMountedRef.current) {
+        return;
+      }
+      const message = error?.response?.data?.message || error?.message || "Unable to load recent incidents.";
+      setInvestigationsError("Unable to load recent incidents");
+      console.error(message);
+    } finally {
+      if (isMountedRef.current) {
+        setInvestigationsLoading(false);
+      }
+    }
+  };
+
   const openAssistantWithMessage = (message) => {
     setActivePage("ai");
     setChatTriggerMessage({
@@ -556,6 +585,22 @@ function Dashboard() {
     setSelectedEventKey(resolvedEventKey);
     openAssistantWithMessage(
       `Explain this ${metric} signal at ${timestamp} with value ${valueLabel}${selectedMachineIdentifier ? ` for ${selectedMachineIdentifier}` : ""}.`
+    );
+  };
+
+  const handleInvestigateAnomaly = (anomaly) => {
+    if (!anomaly) {
+      return;
+    }
+
+    const metricValue = Number(anomaly.metricValue);
+    const scoreValue = Number(anomaly.anomalyScore ?? anomaly.zScore);
+    const formattedValue = Number.isFinite(metricValue) ? `${metricValue.toFixed(1)}%` : "Unknown";
+    const formattedScore = Number.isFinite(scoreValue) ? scoreValue.toFixed(2) : "Unknown";
+    const timestamp = anomaly.detectedAt || anomaly.createdAt || anomaly.timestamp || "Unknown";
+
+    openAssistantWithMessage(
+      `Incident Context:\n\n* Machine: ${anomaly.machineIdentifier || selectedMachineIdentifier || "Unknown"}\n* Metric: ${anomaly.metricType || anomaly.eventType || "Unknown"}\n* Value: ${formattedValue}\n* Z-score: ${formattedScore}\n* Severity: ${anomaly.severity || "UNKNOWN"}\n* Timestamp: ${timestamp}\n* Message: ${anomaly.explanation || anomaly.message || "Potential anomaly detected."}\n\nUser Request:\nHelp me investigate this anomaly and decide whether it needs action.`
     );
   };
 
@@ -582,6 +627,13 @@ function Dashboard() {
     );
   };
 
+  const handleSelectIncident = (incident) => {
+    if (!incident) {
+      return;
+    }
+    onOpenIncident(incident);
+  };
+
   const handleChatMessage = async (message) => {
     try {
       const response = await sendChatMessage(message, selectedMachineIdentifier);
@@ -605,6 +657,7 @@ function Dashboard() {
         refreshTelemetry(mounted, machineIdentifier),
         refreshAlerts(mounted, machineIdentifier),
         refreshAnomalies(mounted, machineIdentifier),
+        refreshInvestigations(mounted, machineIdentifier),
         refreshInsight(mounted, machineIdentifier),
       ]);
     } catch (error) {
@@ -632,6 +685,7 @@ function Dashboard() {
         refreshTelemetry(mounted, ""),
         refreshAlerts(mounted, ""),
         refreshAnomalies(mounted, ""),
+        refreshInvestigations(mounted, ""),
         refreshInsight(mounted, ""),
       ]);
     } catch (error) {
@@ -670,6 +724,7 @@ function Dashboard() {
         refreshAvailableMachines(isMountedRef),
         refreshAlerts(isMountedRef, selectedMachineIdentifier),
         refreshAnomalies(isMountedRef, selectedMachineIdentifier),
+        refreshInvestigations(isMountedRef, selectedMachineIdentifier),
         refreshInsight(isMountedRef, selectedMachineIdentifier),
       ]);
     };
@@ -713,6 +768,7 @@ function Dashboard() {
         refreshAvailableMachines(isMountedRef);
         refreshAlerts(isMountedRef, selectedMachineIdentifier);
         refreshAnomalies(isMountedRef, selectedMachineIdentifier);
+        refreshInvestigations(isMountedRef, selectedMachineIdentifier);
         refreshInsight(isMountedRef, selectedMachineIdentifier);
       },
     });
@@ -734,6 +790,7 @@ function Dashboard() {
       refreshTelemetry(isMountedRef, selectedMachineIdentifier);
       refreshAlerts(isMountedRef, selectedMachineIdentifier);
       refreshAnomalies(isMountedRef, selectedMachineIdentifier);
+      refreshInvestigations(isMountedRef, selectedMachineIdentifier);
       refreshInsight(isMountedRef, selectedMachineIdentifier);
     }, 5000);
 
@@ -855,6 +912,20 @@ function Dashboard() {
         />
 
         <div className="stack-column">
+          <RecentIncidentsPanel
+            investigations={recentInvestigations}
+            loading={investigationsLoading}
+            error={investigationsError}
+            onSelectIncident={handleSelectIncident}
+          />
+
+          <LatestAnomaliesPanel
+            anomalies={filteredAnomalies}
+            loading={anomaliesLoading}
+            error={anomaliesError}
+            onInvestigate={handleInvestigateAnomaly}
+          />
+
           <AiInsightPanel
             latestTelemetry={latestTelemetry}
             alerts={filteredAlerts}
