@@ -2,6 +2,7 @@ services:
   postgres:
     image: postgres:16
     container_name: labwatch-postgres
+    restart: unless-stopped
     environment:
       POSTGRES_DB: ${POSTGRES_DB:-labwatch}
       POSTGRES_USER: ${POSTGRES_USER:-postgres}
@@ -19,6 +20,7 @@ services:
   zookeeper:
     image: confluentinc/cp-zookeeper:7.5.0
     container_name: labwatch-zookeeper
+    restart: unless-stopped
     environment:
       ZOOKEEPER_CLIENT_PORT: 2181
     ports:
@@ -27,6 +29,7 @@ services:
   kafka:
     image: confluentinc/cp-kafka:7.5.0
     container_name: labwatch-kafka
+    restart: unless-stopped
     depends_on:
       - zookeeper
     ports:
@@ -49,10 +52,26 @@ services:
       timeout: 10s
       retries: 10
 
+  redis:
+    image: redis:7.4-alpine
+    container_name: labwatch-redis
+    restart: unless-stopped
+    ports:
+      - "6379:6379"
+    command: ["redis-server", "--appendonly", "yes"]
+    volumes:
+      - redis-data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
   monitoring-api:
     build:
       context: ./monitoring-api
     container_name: labwatch-monitoring-api
+    restart: unless-stopped
     depends_on:
       postgres:
         condition: service_healthy
@@ -70,13 +89,21 @@ services:
       LABWATCH_AGENT_AUTH_ENABLED: ${LABWATCH_AGENT_AUTH_ENABLED:-false}
       JWT_SECRET: ${JWT_SECRET:-dev-only-secret-change-me}
       JWT_EXPIRATION_MINUTES: ${JWT_EXPIRATION_MINUTES:-60}
+      LOGGING_LEVEL_ROOT: ${LOGGING_LEVEL_ROOT:-INFO}
     ports:
       - "8089:8089"
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS http://localhost:8089/actuator/health >/dev/null || exit 1"]
+      interval: 15s
+      timeout: 5s
+      retries: 8
+      start_period: 25s
 
   alert-engine:
     build:
       context: ./alert-engine
     container_name: labwatch-alert-engine
+    restart: unless-stopped
     depends_on:
       postgres:
         condition: service_healthy
@@ -90,44 +117,74 @@ services:
       SPRING_KAFKA_BOOTSTRAP_SERVERS: kafka:29092
       HEALTH_EVENTS_TOPIC: ${HEALTH_EVENTS_TOPIC:-health-events}
       ALERT_EVENTS_TOPIC: ${ALERT_EVENTS_TOPIC:-alert-events}
+      HEALTH_EVENTS_DLT_TOPIC: ${ALERT_ENGINE_HEALTH_EVENTS_DLT_TOPIC:-health-events.alert-engine.dlt}
       SPRING_KAFKA_CONSUMER_GROUP_ID: ${ALERT_ENGINE_CONSUMER_GROUP_ID:-alert-engine-group}
       SPRING_JPA_HIBERNATE_DDL_AUTO: ${SPRING_JPA_HIBERNATE_DDL_AUTO:-update}
       LABWATCH_AUTH_ENABLED: ${LABWATCH_AUTH_ENABLED:-false}
       MONITORING_API_BASE_URL: http://monitoring-api:8089
+      LABWATCH_KAFKA_RETRY_ATTEMPTS: ${LABWATCH_KAFKA_RETRY_ATTEMPTS:-3}
+      LABWATCH_KAFKA_RETRY_BACKOFF_MS: ${LABWATCH_KAFKA_RETRY_BACKOFF_MS:-1000}
+      LOGGING_LEVEL_ROOT: ${LOGGING_LEVEL_ROOT:-INFO}
     ports:
       - "8088:8088"
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS http://localhost:8088/actuator/health >/dev/null || exit 1"]
+      interval: 15s
+      timeout: 5s
+      retries: 8
+      start_period: 25s
 
   notification-service:
     build:
       context: ./notification-service
     container_name: labwatch-notification-service
+    restart: unless-stopped
     depends_on:
       kafka:
+        condition: service_healthy
+      redis:
         condition: service_healthy
     environment:
       SERVER_PORT: 8091
       SPRING_KAFKA_BOOTSTRAP_SERVERS: kafka:29092
       ALERT_EVENTS_TOPIC: ${ALERT_EVENTS_TOPIC:-alert-events}
       AI_INVESTIGATION_EVENTS_TOPIC: ${AI_INVESTIGATION_EVENTS_TOPIC:-ai-investigation-events}
+      ALERT_EVENTS_DLT_TOPIC: ${NOTIFICATION_ALERT_EVENTS_DLT_TOPIC:-alert-events.notification-service.dlt}
+      AI_INVESTIGATION_EVENTS_DLT_TOPIC: ${NOTIFICATION_AI_INVESTIGATION_EVENTS_DLT_TOPIC:-ai-investigation-events.notification-service.dlt}
       SPRING_KAFKA_CONSUMER_GROUP_ID: ${NOTIFICATION_SERVICE_CONSUMER_GROUP_ID:-notification-service-group}
+      SPRING_DATA_REDIS_HOST: redis
+      SPRING_DATA_REDIS_PORT: 6379
       LABWATCH_NOTIFICATIONS_EMAIL_ENABLED: "false"
       LABWATCH_ALERT_EMAIL_TO: ""
       LABWATCH_ALERT_EMAIL_FROM: "labwatch@localhost"
+      LABWATCH_KAFKA_RETRY_ATTEMPTS: ${LABWATCH_KAFKA_RETRY_ATTEMPTS:-3}
+      LABWATCH_KAFKA_RETRY_BACKOFF_MS: ${LABWATCH_KAFKA_RETRY_BACKOFF_MS:-1000}
+      SPRING_DATA_REDIS_TIMEOUT: ${SPRING_DATA_REDIS_TIMEOUT:-2s}
+      LOGGING_LEVEL_ROOT: ${LOGGING_LEVEL_ROOT:-INFO}
       SMTP_HOST: ""
       SMTP_PORT: "587"
       SMTP_USER: ""
       SMTP_PASSWORD: ""
     ports:
       - "8091:8091"
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS http://localhost:8091/actuator/health >/dev/null || exit 1"]
+      interval: 15s
+      timeout: 5s
+      retries: 8
+      start_period: 25s
 
   ai-engine-service:
     build:
       context: ./ai-engine-service
     container_name: labwatch-ai-engine-service
+    restart: unless-stopped
     depends_on:
       postgres:
         condition: service_healthy
       kafka:
+        condition: service_healthy
+      redis:
         condition: service_healthy
     environment:
       SERVER_PORT: 8090
@@ -139,32 +196,50 @@ services:
       AI_INVESTIGATION_EVENTS_TOPIC: ${AI_INVESTIGATION_EVENTS_TOPIC:-ai-investigation-events}
       HEALTH_EVENTS_TOPIC: ${HEALTH_EVENTS_TOPIC:-health-events}
       ANOMALY_EVENTS_TOPIC: ${ANOMALY_EVENTS_TOPIC:-anomaly-events}
+      HEALTH_EVENTS_DLT_TOPIC: ${AI_ENGINE_HEALTH_EVENTS_DLT_TOPIC:-health-events.ai-engine.dlt}
+      ALERT_EVENTS_DLT_TOPIC: ${AI_ENGINE_ALERT_EVENTS_DLT_TOPIC:-alert-events.ai-engine.dlt}
       SPRING_KAFKA_CONSUMER_GROUP_ID: ${AI_ENGINE_CONSUMER_GROUP_ID:-ai-engine-group}
       SPRING_JPA_HIBERNATE_DDL_AUTO: ${SPRING_JPA_HIBERNATE_DDL_AUTO:-update}
+      SPRING_DATA_REDIS_HOST: redis
+      SPRING_DATA_REDIS_PORT: 6379
       ANOMALY_WINDOW_SIZE: ${ANOMALY_WINDOW_SIZE:-10}
       ANOMALY_MINIMUM_SAMPLES: ${ANOMALY_MINIMUM_SAMPLES:-5}
       ANOMALY_Z_SCORE_THRESHOLD: ${ANOMALY_Z_SCORE_THRESHOLD:-2.5}
       LABWATCH_AI_ANOMALY_PROMOTION_ENABLED: ${LABWATCH_AI_ANOMALY_PROMOTION_ENABLED:-true}
       LABWATCH_AI_ANOMALY_PROMOTION_COOLDOWN_SECONDS: ${LABWATCH_AI_ANOMALY_PROMOTION_COOLDOWN_SECONDS:-300}
-      AI_PROVIDER: ${AI_PROVIDER}
-      OPENAI_API_KEY: ${OPENAI_API_KEY}
-      OPENAI_MODEL: ${OPENAI_MODEL}
+      LABWATCH_AI_INVESTIGATION_CONCURRENCY: ${LABWATCH_AI_INVESTIGATION_CONCURRENCY:-4}
+      LABWATCH_AI_INVESTIGATION_QUEUE_CAPACITY: ${LABWATCH_AI_INVESTIGATION_QUEUE_CAPACITY:-100}
+      LABWATCH_AI_INVESTIGATION_TIMEOUT_MS: ${LABWATCH_AI_INVESTIGATION_TIMEOUT_MS:-15000}
+      LABWATCH_KAFKA_RETRY_ATTEMPTS: ${LABWATCH_KAFKA_RETRY_ATTEMPTS:-3}
+      LABWATCH_KAFKA_RETRY_BACKOFF_MS: ${LABWATCH_KAFKA_RETRY_BACKOFF_MS:-1000}
+      SPRING_DATA_REDIS_TIMEOUT: ${SPRING_DATA_REDIS_TIMEOUT:-2s}
+      AI_PROVIDER: ${AI_PROVIDER:-mock}
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+      OPENAI_MODEL: ${OPENAI_MODEL:-gpt-4.1-mini}
+      LOGGING_LEVEL_ROOT: ${LOGGING_LEVEL_ROOT:-INFO}
       LABWATCH_AUTH_ENABLED: ${LABWATCH_AUTH_ENABLED:-false}
     ports:
       - "8090:8090"
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS http://localhost:8090/actuator/health >/dev/null || exit 1"]
+      interval: 15s
+      timeout: 5s
+      retries: 8
+      start_period: 25s
 
   prometheus:
     image: prom/prometheus:v2.54.1
     container_name: labwatch-prometheus
+    restart: unless-stopped
     depends_on:
       monitoring-api:
-        condition: service_started
+        condition: service_healthy
       alert-engine:
-        condition: service_started
+        condition: service_healthy
       ai-engine-service:
-        condition: service_started
+        condition: service_healthy
       notification-service:
-        condition: service_started
+        condition: service_healthy
     command:
       - --config.file=/etc/prometheus/prometheus.yml
     volumes:
@@ -175,6 +250,7 @@ services:
   grafana:
     image: grafana/grafana:11.1.4
     container_name: labwatch-grafana
+    restart: unless-stopped
     depends_on:
       prometheus:
         condition: service_started
@@ -186,3 +262,4 @@ services:
 volumes:
   postgres-data:
   grafana-data:
+  redis-data:

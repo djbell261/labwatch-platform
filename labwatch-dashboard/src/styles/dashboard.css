@@ -351,7 +351,29 @@ body {
   gap: 8px;
   letter-spacing: 0.08em;
   padding: 8px 12px;
+  position: relative;
   text-transform: uppercase;
+}
+
+.status-pill-accent {
+  border-radius: 999px;
+  inset: -1px;
+  opacity: 0;
+  pointer-events: none;
+  position: absolute;
+  transition: opacity 180ms ease;
+}
+
+.status-pill-accent.severity-high {
+  background: radial-gradient(circle, rgba(249, 115, 22, 0.18) 0%, rgba(239, 68, 68, 0.06) 62%, transparent 100%);
+  box-shadow: 0 0 18px rgba(249, 115, 22, 0.16);
+  opacity: 1;
+}
+
+.status-pill-accent.severity-critical {
+  background: radial-gradient(circle, rgba(239, 68, 68, 0.26) 0%, rgba(185, 28, 28, 0.12) 58%, transparent 100%);
+  box-shadow: 0 0 22px rgba(239, 68, 68, 0.24);
+  opacity: 1;
 }
 
 .status-pill.green {
@@ -404,6 +426,10 @@ body {
   grid-template-columns: repeat(4, minmax(0, 1fr));
 }
 
+.dashboard-kpi-grid {
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+}
+
 .surface-card {
   background:
     linear-gradient(180deg, rgba(30, 41, 59, 0.94) 0%, rgba(17, 24, 39, 0.92) 100%);
@@ -430,6 +456,73 @@ body {
 .detail-stat:hover {
   border-color: rgba(148, 163, 184, 0.24);
   transform: translateY(-2px);
+}
+
+.fleet-health-card {
+  overflow: hidden;
+}
+
+.fleet-health-meta {
+  display: grid;
+  gap: 10px;
+}
+
+.fleet-health-row {
+  display: flex;
+  gap: 8px;
+}
+
+.fleet-health-chip {
+  border-radius: 999px;
+  font-size: 0.76rem;
+  font-weight: 700;
+  padding: 6px 10px;
+}
+
+.fleet-health-chip.online {
+  background: rgba(34, 197, 94, 0.12);
+  border: 1px solid rgba(34, 197, 94, 0.18);
+  color: #86efac;
+}
+
+.fleet-health-chip.offline {
+  background: rgba(148, 163, 184, 0.12);
+  border: 1px solid rgba(148, 163, 184, 0.18);
+  color: #cbd5e1;
+}
+
+.fleet-health-bar {
+  background: rgba(15, 23, 42, 0.88);
+  border: 1px solid rgba(148, 163, 184, 0.12);
+  border-radius: 999px;
+  height: 8px;
+  overflow: hidden;
+}
+
+.fleet-health-bar-online {
+  background: linear-gradient(90deg, rgba(34, 197, 94, 0.82) 0%, rgba(110, 231, 183, 0.9) 100%);
+  display: block;
+  height: 100%;
+}
+
+.fleet-health-sparkline {
+  display: flex;
+  gap: 6px;
+}
+
+.fleet-health-node {
+  border-radius: 999px;
+  flex: 1 1 0;
+  height: 6px;
+}
+
+.fleet-health-node.online {
+  background: rgba(34, 197, 94, 0.72);
+  box-shadow: 0 0 8px rgba(34, 197, 94, 0.14);
+}
+
+.fleet-health-node.offline {
+  background: rgba(100, 116, 139, 0.5);
 }
 
 .card-header {
@@ -489,7 +582,7 @@ body {
 
 .stack-column {
   display: grid;
-  gap: 16px;
+  gap: 14px;
 }
 
 .incidents-list {
@@ -505,6 +598,162 @@ body {
 
 .dashboard-telemetry-panel {
   gap: 16px;
+}
+
+.dashboard-preview-card {
+  gap: 14px;
+}
+
+.below-fold-card {
+  background:
+    linear-gradient(180deg, rgba(27, 37, 53, 0.92) 0%, rgba(14, 20, 34, 0.92) 100%);
+  border-color: rgba(148, 163, 184, 0.12);
+  box-shadow: 0 14px 30px rgba(2, 6, 23, 0.2);
+}
+
+.below-fold-card .section-title {
+  font-size: 1.1rem;
+}
+
+.dashboard-preview-list {
+  display: grid;
+  gap: 10px;
+}
+
+.dashboard-preview-item {
+  background: rgba(11, 18, 32, 0.82);
+  border: 1px solid rgba(148, 163, 184, 0.12);
+  border-radius: 18px;
+  color: var(--text);
+  cursor: pointer;
+  display: grid;
+  gap: 8px;
+  padding: 14px 16px;
+  text-align: left;
+  transition:
+    transform 180ms ease,
+    border-color 180ms ease,
+    background 180ms ease;
+}
+
+.dashboard-preview-item:hover {
+  background: rgba(15, 23, 42, 0.92);
+  border-color: rgba(56, 189, 248, 0.24);
+  transform: translateY(-1px);
+}
+
+.alert-queue-item.is-primary-issue {
+  border-color: rgba(239, 68, 68, 0.24);
+  box-shadow: 0 16px 30px rgba(127, 29, 29, 0.14);
+}
+
+.alert-queue-item.is-primary-issue:hover {
+  border-color: rgba(249, 115, 22, 0.24);
+}
+
+.alert-queue-item.is-resolved-alert {
+  background: rgba(10, 16, 28, 0.68);
+  border-color: rgba(100, 116, 139, 0.12);
+}
+
+.alert-queue-item.is-resolved-alert .incident-machine,
+.alert-queue-item.is-resolved-alert .incident-summary,
+.alert-queue-item.is-resolved-alert .incident-action-preview span:last-child {
+  color: #b1bfd3;
+}
+
+.dashboard-preview-card .section-card,
+.dashboard-preview-card .surface-card {
+  background: transparent;
+  border: 0;
+  box-shadow: none;
+  padding: 0;
+}
+
+.dashboard-preview-card .recent-incidents-header {
+  margin-bottom: 0;
+}
+
+.below-fold-card .recent-incidents-header {
+  align-items: center;
+}
+
+.dashboard-preview-card .incidents-list {
+  gap: 10px;
+}
+
+.dashboard-preview-card .incident-card,
+.dashboard-preview-card .anomaly-card {
+  padding: 14px 16px;
+}
+
+.service-health-grid {
+  display: grid;
+  gap: 14px;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+
+.service-health-card {
+  display: grid;
+  gap: 12px;
+  min-height: 132px;
+  padding: 18px;
+}
+
+.service-health-status {
+  font-size: 1.2rem;
+  font-weight: 750;
+}
+
+.activity-list,
+.compact-activity-list {
+  display: grid;
+  gap: 10px;
+}
+
+.compact-activity-section {
+  gap: 14px;
+}
+
+.compact-activity-row {
+  align-items: center;
+  display: grid;
+  gap: 12px;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  padding: 12px 14px;
+  border-radius: 16px;
+  background: rgba(11, 18, 32, 0.78);
+  border: 1px solid rgba(148, 163, 184, 0.1);
+}
+
+.compact-activity-kind {
+  justify-content: center;
+  min-width: 84px;
+}
+
+.compact-activity-copy {
+  min-width: 0;
+}
+
+.compact-activity-title {
+  color: var(--text);
+  font-size: 0.93rem;
+  font-weight: 700;
+}
+
+.compact-activity-description {
+  color: var(--text-muted);
+  font-size: 0.84rem;
+  margin-top: 2px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.compact-activity-time {
+  color: var(--text-muted);
+  font-size: 0.8rem;
+  white-space: nowrap;
 }
 
 .section-header {
@@ -715,6 +964,7 @@ body {
   border-radius: 18px;
   min-height: 340px;
   padding: 14px 14px 8px;
+  position: relative;
 }
 
 .overview-tooltip {
@@ -738,6 +988,24 @@ body {
   display: flex;
   justify-content: space-between;
   margin-top: 4px;
+}
+
+.overview-event-card {
+  background: rgba(9, 14, 25, 0.96);
+  border: 1px solid rgba(148, 163, 184, 0.18);
+  border-radius: 16px;
+  bottom: 18px;
+  box-shadow: 0 20px 30px rgba(2, 6, 23, 0.35);
+  max-width: 300px;
+  padding: 14px 16px;
+  position: absolute;
+  right: 18px;
+  z-index: 4;
+}
+
+.overview-event-copy {
+  color: var(--text-soft);
+  margin-top: 6px;
 }
 
 .event-chip-row {
@@ -828,6 +1096,14 @@ body {
     border-color 180ms ease,
     background 180ms ease,
     box-shadow 180ms ease;
+  position: relative;
+}
+
+.incident-card-compact,
+.anomaly-card-compact {
+  gap: 8px;
+  min-height: 0;
+  padding: 14px 16px;
 }
 
 .incident-card:hover {
@@ -873,6 +1149,11 @@ body {
   font-size: 0.82rem;
 }
 
+.incident-confidence-active {
+  color: #fca5a5;
+  font-weight: 700;
+}
+
 .incident-alert-type {
   color: #dbeafe;
   font-size: 0.86rem;
@@ -888,12 +1169,43 @@ body {
   margin: 0;
 }
 
+.incident-summary-compact {
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 1;
+  display: -webkit-box;
+  font-size: 0.92rem;
+  line-height: 1.45;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
 .incident-action-preview,
 .incident-context-copy.subtle {
   color: var(--text-muted);
   display: grid;
   gap: 4px;
   font-size: 0.88rem;
+}
+
+.incident-timestamp-detail {
+  color: var(--text-muted);
+  font-size: 0.8rem;
+}
+
+.preview-card-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  justify-content: flex-start;
+  position: relative;
+  z-index: 2;
+}
+
+.queue-overflow-note {
+  color: var(--text-muted);
+  font-size: 0.82rem;
+  padding: 2px 4px 0;
+  text-align: right;
 }
 
 .anomaly-card-footer {
@@ -906,8 +1218,8 @@ body {
 
 .anomaly-card-stats {
   color: var(--text-muted);
-  display: grid;
-  gap: 4px;
+  display: flex;
+  gap: 10px;
   font-size: 0.84rem;
 }
 
@@ -919,6 +1231,77 @@ body {
 .snapshot-grid {
   display: grid;
   gap: 10px;
+}
+
+.ai-operations-card {
+  background:
+    radial-gradient(circle at top right, rgba(56, 189, 248, 0.12), transparent 34%),
+    linear-gradient(180deg, rgba(31, 41, 55, 0.96) 0%, rgba(13, 20, 33, 0.96) 100%);
+  border-color: rgba(56, 189, 248, 0.18);
+  box-shadow: 0 20px 40px rgba(2, 6, 23, 0.28);
+}
+
+.ai-operations-card .section-title {
+  letter-spacing: -0.02em;
+}
+
+.ai-operations-card .snapshot-grid {
+  gap: 8px;
+}
+
+.ai-operations-card .snapshot-row {
+  padding: 12px 14px;
+}
+
+.ai-operations-card .quick-actions-grid {
+  gap: 10px;
+}
+
+.ai-operations-card .quick-action-button {
+  padding: 13px 14px;
+}
+
+.ai-operations-card .quick-action-title {
+  font-size: 0.95rem;
+}
+
+.ai-operations-card .machine-card-subtle {
+  font-size: 0.82rem;
+}
+
+.inline-link-button {
+  align-self: start;
+  border-color: rgba(56, 189, 248, 0.14);
+  color: #b7dcf7;
+  padding-left: 0;
+  padding-right: 0;
+}
+
+.inline-link-button:hover {
+  background: transparent;
+  border-color: rgba(56, 189, 248, 0.24);
+  color: #e5f4ff;
+}
+
+.card-hit-area {
+  background: transparent;
+  border: 0;
+  cursor: pointer;
+  inset: 0;
+  padding: 0;
+  position: absolute;
+  z-index: 1;
+}
+
+.sr-only {
+  border: 0;
+  clip: rect(0 0 0 0);
+  height: 1px;
+  margin: -1px;
+  overflow: hidden;
+  padding: 0;
+  position: absolute;
+  width: 1px;
 }
 
 .snapshot-row {
@@ -970,6 +1353,16 @@ body {
     transform 180ms ease,
     border-color 180ms ease,
     background 180ms ease;
+}
+
+.quick-action-button.primary-ai-cta {
+  background: linear-gradient(180deg, rgba(16, 185, 129, 0.14) 0%, rgba(11, 18, 32, 0.92) 100%);
+  border-color: rgba(56, 189, 248, 0.2);
+  box-shadow: 0 16px 30px rgba(14, 165, 233, 0.08);
+}
+
+.ai-operations-card .quick-action-button.primary-ai-cta {
+  box-shadow: 0 18px 34px rgba(14, 165, 233, 0.12);
 }
 
 .quick-action-copy {
@@ -1418,6 +1811,11 @@ body {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
+  .dashboard-kpi-grid,
+  .service-health-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
   .dashboard-grid,
   .assistant-layout,
   .incident-detail-layout {
@@ -1457,6 +1855,8 @@ body {
 
   .sidebar-nav,
   .kpi-grid,
+  .dashboard-kpi-grid,
+  .service-health-grid,
   .machine-grid,
   .detail-grid,
   .incident-detail-meta {

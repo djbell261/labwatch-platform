@@ -4,6 +4,7 @@ import com.example.monitoringapi.dto.request.AuthLoginRequest;
 import com.example.monitoringapi.dto.request.AuthRegisterRequest;
 import com.example.monitoringapi.dto.response.AuthResponse;
 import com.example.monitoringapi.entity.User;
+import com.example.monitoringapi.entity.UserRole;
 import com.example.monitoringapi.exception.UnauthorizedException;
 import com.example.monitoringapi.repository.UserRepository;
 import com.example.monitoringapi.security.JwtService;
@@ -34,6 +35,7 @@ public class AuthService {
         user.setEmail(request.getEmail().trim().toLowerCase());
         user.setPasswordHash(passwordEncoder.encode(request.getPassword()));
         user.setDisplayName(request.getDisplayName().trim());
+        user.setRole(userRepository.count() == 0 ? UserRole.ADMIN : UserRole.OPERATOR);
 
         User savedUser = userRepository.save(user);
         return toAuthResponse(savedUser);
@@ -52,11 +54,14 @@ public class AuthService {
     }
 
     private AuthResponse toAuthResponse(User user) {
+        JwtService.TokenBundle tokenBundle = jwtService.generateTokenBundle(user);
         return new AuthResponse(
-                jwtService.generateToken(user),
+                tokenBundle.token(),
                 user.getUserId(),
                 user.getEmail(),
-                user.getDisplayName()
+                user.getDisplayName(),
+                user.getRole().name(),
+                tokenBundle.expiresAt()
         );
     }
 }

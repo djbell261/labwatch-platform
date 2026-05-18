@@ -27,10 +27,18 @@ public class AlertEventInvestigationConsumer {
     public void consumeAlertEvent(ConsumerRecord<String, AlertEventMessage> record) {
         AlertEventMessage alertEventMessage = record.value();
         if (alertEventMessage == null) {
-            log.info("Skipping alert event because it does not qualify for AI investigation");
-            return;
+            throw new IllegalArgumentException("Kafka record did not contain an alert event payload");
         }
 
+        log.info(
+                "event=alert_event_consumed topic={} partition={} offset={} machineIdentifier={} severity={} status={}",
+                record.topic(),
+                record.partition(),
+                record.offset(),
+                alertEventMessage.getMachineIdentifier(),
+                alertEventMessage.getSeverity(),
+                alertEventMessage.getStatus()
+        );
         aiInvestigationService.processAlertEvent(alertEventMessage);
     }
 }

@@ -11,7 +11,7 @@ export function formatTimestamp(value) {
   return parsed.toLocaleString();
 }
 
-export function formatRelativeLastSeen(value) {
+export function formatRelativeTimestamp(value) {
   if (!value) {
     return "No data";
   }
@@ -22,7 +22,7 @@ export function formatRelativeLastSeen(value) {
   }
 
   const diffSeconds = Math.max(0, Math.round((Date.now() - parsed.getTime()) / 1000));
-  if (diffSeconds < 5) {
+  if (diffSeconds < 10) {
     return "Just now";
   }
   if (diffSeconds < 60) {
@@ -31,7 +31,14 @@ export function formatRelativeLastSeen(value) {
   if (diffSeconds < 3600) {
     return `${Math.round(diffSeconds / 60)}m ago`;
   }
-  return `${Math.round(diffSeconds / 3600)}h ago`;
+  if (diffSeconds < 86400) {
+    return `${Math.round(diffSeconds / 3600)}h ago`;
+  }
+  return `${Math.round(diffSeconds / 86400)}d ago`;
+}
+
+export function formatRelativeLastSeen(value) {
+  return formatRelativeTimestamp(value);
 }
 
 export function resolveMachineStatus(machine) {
@@ -107,6 +114,68 @@ export function getSeverityTone(severity) {
     return "yellow";
   }
   return "blue";
+}
+
+export function getSeverityRank(severity) {
+  const normalized = String(severity || "").toUpperCase();
+  if (normalized === "CRITICAL") {
+    return 4;
+  }
+  if (normalized === "HIGH") {
+    return 3;
+  }
+  if (normalized === "MEDIUM") {
+    return 2;
+  }
+  if (normalized === "LOW") {
+    return 1;
+  }
+  return 0;
+}
+
+export function getAlertTimestamp(alert) {
+  return alert?.createdAt || alert?.timestamp || alert?.resolvedAt || null;
+}
+
+export function getAlertRecommendedAction(alert) {
+  const metric = String(alert?.alertType || alert?.eventType || "").toUpperCase();
+  if (metric === "CPU") {
+    return "Review the top CPU-consuming process and confirm whether the spike is still ongoing.";
+  }
+  if (metric === "MEMORY") {
+    return "Inspect memory-heavy processes and check whether pressure is increasing or stabilizing.";
+  }
+  if (metric === "DISK") {
+    return "Check disk utilization growth and identify files, logs, or workloads causing pressure.";
+  }
+  return "Review the affected machine and confirm whether operator action is needed now.";
+}
+
+export function sortAlertsForQueue(alerts = []) {
+  if (!Array.isArray(alerts)) {
+    return [];
+  }
+
+  return [...alerts].sort((left, right) => {
+    const leftActive = String(left?.status || "").toUpperCase() === "ACTIVE" ? 1 : 0;
+    const rightActive = String(right?.status || "").toUpperCase() === "ACTIVE" ? 1 : 0;
+    if (rightActive !== leftActive) {
+      return rightActive - leftActive;
+    }
+
+    const rightTime = new Date(getAlertTimestamp(right) || 0).getTime();
+    const leftTime = new Date(getAlertTimestamp(left) || 0).getTime();
+    if (rightTime !== leftTime) {
+      return rightTime - leftTime;
+    }
+
+    const severityDelta = getSeverityRank(right?.severity) - getSeverityRank(left?.severity);
+    if (severityDelta !== 0) {
+      return severityDelta;
+    }
+
+    return String(right?.machineIdentifier || "").localeCompare(String(left?.machineIdentifier || ""));
+  });
 }
 
 export function truncate(value, limit = 120) {

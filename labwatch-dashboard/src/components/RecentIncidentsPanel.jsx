@@ -1,3 +1,6 @@
+import EmptyState from "./states/EmptyState";
+import ErrorState from "./states/ErrorState";
+
 function formatIncidentTime(value) {
   if (!value) {
     return "No timestamp";
@@ -22,6 +25,17 @@ function getSeverityTone(severity) {
   return "blue";
 }
 
+function getSeverityAccentClass(severity) {
+  const normalized = String(severity || "").toUpperCase();
+  if (normalized === "CRITICAL") {
+    return "severity-critical";
+  }
+  if (normalized === "HIGH") {
+    return "severity-high";
+  }
+  return "";
+}
+
 function truncate(value, limit) {
   const content = String(value || "").trim();
   if (!content) {
@@ -33,15 +47,13 @@ function truncate(value, limit) {
 
 function IncidentSkeletonCard() {
   return (
-    <article className="incident-card is-loading" aria-hidden="true">
+    <article className="incident-card incident-card-compact is-loading" aria-hidden="true">
       <div className="incident-card-top">
         <span className="skeleton-line" style={{ width: "92px" }} />
         <span className="skeleton-line" style={{ width: "110px" }} />
       </div>
       <span className="skeleton-line" style={{ width: "46%" }} />
       <span className="skeleton-line" style={{ width: "82%", height: "14px" }} />
-      <span className="skeleton-line" style={{ width: "67%" }} />
-      <span className="skeleton-line" style={{ width: "74%" }} />
     </article>
   );
 }
@@ -51,6 +63,11 @@ function RecentIncidentsPanel({
   loading = false,
   error = "",
   onSelectIncident,
+  onInvestigateIncident,
+  cardLabel = "Recent Incidents",
+  title = "Persisted AI Investigations",
+  actionLabel = "View all",
+  onViewAll,
   limit = 5,
 }) {
   const visibleInvestigations = investigations.slice(0, limit);
@@ -59,11 +76,11 @@ function RecentIncidentsPanel({
     <section className="surface-card section-card">
       <div className="section-header recent-incidents-header">
         <div>
-          <div className="card-label">Recent Incidents</div>
-          <h2 className="section-title">Persisted AI Investigations</h2>
+          <div className="card-label">{cardLabel}</div>
+          <h2 className="section-title">{title}</h2>
         </div>
-        <button type="button" className="ghost-button is-placeholder" disabled>
-          View all
+        <button type="button" className="ghost-button" disabled={!onViewAll} onClick={() => onViewAll?.()}>
+          {actionLabel}
         </button>
       </div>
 
@@ -74,22 +91,24 @@ function RecentIncidentsPanel({
           ))}
         </div>
       ) : error ? (
-        <div className="empty-state recent-incidents-empty">Unable to load recent incidents</div>
+        <ErrorState message={error || "Unable to load recent incidents"} />
       ) : visibleInvestigations.length === 0 ? (
-        <div className="empty-state recent-incidents-empty">No AI investigations yet</div>
+        <EmptyState message="No active incidents" />
       ) : (
         <div className="incidents-list">
           {visibleInvestigations.map((incident) => {
             const severityTone = getSeverityTone(incident.severity);
             return (
-              <button
+              <article
                 key={incident.investigationId || `${incident.alertId}-${incident.createdAt}`}
-                type="button"
-                className="incident-card"
-                onClick={() => onSelectIncident?.(incident)}
+                className="incident-card incident-card-compact"
               >
+                <button type="button" className="card-hit-area" onClick={() => onSelectIncident?.(incident)}>
+                  <span className="sr-only">Open incident</span>
+                </button>
                 <div className="incident-card-top">
                   <span className={`status-pill ${severityTone}`}>
+                    <span className={`status-pill-accent ${getSeverityAccentClass(incident.severity)}`} />
                     <span className={`status-dot ${severityTone}`} />
                     {incident.severity || "UNKNOWN"}
                   </span>
@@ -100,12 +119,13 @@ function RecentIncidentsPanel({
                   <span className="incident-alert-type">{incident.alertType || "Unknown alert"}</span>
                   <span className="incident-created-at">{formatIncidentTime(incident.createdAt)}</span>
                 </div>
-                <p className="incident-summary">{truncate(incident.summary, 180)}</p>
-                <div className="incident-action-preview">
-                  <span className="incident-action-label">Recommended action</span>
-                  <span>{truncate(incident.recommendedAction, 120)}</span>
+                <p className="incident-summary incident-summary-compact">{truncate(incident.summary, 140)}</p>
+                <div className="preview-card-actions">
+                  <button type="button" className="ghost-button" onClick={() => onSelectIncident?.(incident)}>
+                    Open incident
+                  </button>
                 </div>
-              </button>
+              </article>
             );
           })}
         </div>

@@ -21,32 +21,24 @@ public class AlertEventConsumer {
 
     @KafkaListener(
             topics = "${app.kafka.topic.alert-events}",
-            groupId = "${spring.kafka.consumer.group-id}"
+            groupId = "${spring.kafka.consumer.group-id}",
+            containerFactory = "alertEventKafkaListenerContainerFactory"
     )
     public void consumeAlertEvent(ConsumerRecord<String, AlertEventMessage> record) {
         AlertEventMessage alertEventMessage = record.value();
         if (alertEventMessage == null) {
-            log.warn("Skipping invalid alert event from Kafka because the payload could not be deserialized");
-            return;
+            throw new IllegalArgumentException("Kafka record did not contain an alert event payload");
         }
 
-        try {
-            log.info(
-                    "Received alert event from Kafka for machine {} severity {} status {}",
-                    alertEventMessage != null ? alertEventMessage.getMachineIdentifier() : "unknown",
-                    alertEventMessage != null ? alertEventMessage.getSeverity() : "unknown",
-                    alertEventMessage != null ? alertEventMessage.getStatus() : "unknown"
-            );
-
-            notificationDispatchService.dispatchAlertNotification(alertEventMessage);
-        } catch (Exception exception) {
-            log.warn(
-                    "Failed to process alert event for machine {} alert type {}: {}",
-                    alertEventMessage != null ? alertEventMessage.getMachineIdentifier() : "unknown",
-                    alertEventMessage != null ? alertEventMessage.getAlertType() : "unknown",
-                    exception.getMessage()
-            );
-        }
+        log.info(
+                "event=alert_event_consumed topic={} partition={} offset={} machineIdentifier={} severity={} status={}",
+                record.topic(),
+                record.partition(),
+                record.offset(),
+                alertEventMessage.getMachineIdentifier(),
+                alertEventMessage.getSeverity(),
+                alertEventMessage.getStatus()
+        );
+        notificationDispatchService.dispatchAlertNotification(alertEventMessage);
     }
-
 }

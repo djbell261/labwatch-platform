@@ -1,6 +1,7 @@
 package com.example.monitoringapi.security;
 
 import com.example.monitoringapi.entity.User;
+import com.example.monitoringapi.entity.UserRole;
 import io.jsonwebtoken.Claims;
 import io.jsonwebtoken.Jwts;
 import io.jsonwebtoken.security.Keys;
@@ -16,6 +17,9 @@ import java.util.Date;
 @Service
 public class JwtService {
 
+    public record TokenBundle(String token, Instant expiresAt) {
+    }
+
     private final SecretKey secretKey;
     private final long expirationMinutes;
 
@@ -27,16 +31,24 @@ public class JwtService {
         this.expirationMinutes = expirationMinutes;
     }
 
-    public String generateToken(User user) {
+    public TokenBundle generateTokenBundle(User user) {
         Instant now = Instant.now();
-        return Jwts.builder()
+        Instant expiresAt = now.plus(expirationMinutes, ChronoUnit.MINUTES);
+        String token = Jwts.builder()
                 .subject(user.getUserId())
                 .claim("email", user.getEmail())
                 .claim("displayName", user.getDisplayName())
+                .claim("role", user.getRole().name())
                 .issuedAt(Date.from(now))
-                .expiration(Date.from(now.plus(expirationMinutes, ChronoUnit.MINUTES)))
+                .expiration(Date.from(expiresAt))
                 .signWith(secretKey)
                 .compact();
+
+        return new TokenBundle(token, expiresAt);
+    }
+
+    public String generateToken(User user) {
+        return generateTokenBundle(user).token();
     }
 
     public Claims parseToken(String token) {
@@ -45,6 +57,15 @@ public class JwtService {
                 .build()
                 .parseSignedClaims(token)
                 .getPayload();
+    }
+
+    public UserRole extractRole(Claims claims) {
+        String value = claims.get("role", String.class);
+        if (value == null || value.isBlank()) {
+            return UserRole.OPERATOR;
+        }
+
+        return UserRole.valueOf(value.trim().toUpperCase());
     }
 
     private static String padSecret(String secret) {

@@ -5,6 +5,12 @@ spring:
   application:
     name: ai-engine-service
 
+  data:
+    redis:
+      host: ${SPRING_DATA_REDIS_HOST:localhost}
+      port: ${SPRING_DATA_REDIS_PORT:6379}
+      timeout: ${SPRING_DATA_REDIS_TIMEOUT:2s}
+
   datasource:
     url: ${SPRING_DATASOURCE_URL:jdbc:postgresql://localhost:5433/labwatch}
     username: ${SPRING_DATASOURCE_USERNAME:postgres}
@@ -48,6 +54,8 @@ logging:
   level:
     root: ${LOGGING_LEVEL_ROOT:INFO}
     org.springframework: ${LOGGING_LEVEL_ORG_SPRINGFRAMEWORK:INFO}
+  pattern:
+    console: "%d{yyyy-MM-dd'T'HH:mm:ss.SSSXXX} %-5level service=${spring.application.name} requestId=%X{requestId:-na} userId=%X{userId:-anon} [%thread] %logger{36} - %msg%n"
 
 management:
   endpoints:
@@ -94,6 +102,9 @@ labwatch:
 
 app:
   kafka:
+    retry:
+      attempts: ${LABWATCH_KAFKA_RETRY_ATTEMPTS:3}
+      backoff-ms: ${LABWATCH_KAFKA_RETRY_BACKOFF_MS:1000}
     consumer:
       group:
         ai-investigation: ${AI_INVESTIGATION_CONSUMER_GROUP_ID:ai-investigation-group}
@@ -103,5 +114,12 @@ app:
       alert-events: ${ALERT_EVENTS_TOPIC:alert-events}
       ai-investigation-events: ${AI_INVESTIGATION_EVENTS_TOPIC:ai-investigation-events}
       anomaly-events: ${ANOMALY_EVENTS_TOPIC:anomaly-events}
+      health-events-dlt: ${HEALTH_EVENTS_DLT_TOPIC:health-events.ai-engine.dlt}
+      alert-events-dlt: ${ALERT_EVENTS_DLT_TOPIC:alert-events.ai-engine.dlt}
   anomaly:
     window-size: ${ANOMALY_WINDOW_SIZE:60}
+
+  ai-investigation:
+    concurrency: ${LABWATCH_AI_INVESTIGATION_CONCURRENCY:4}
+    queue-capacity: ${LABWATCH_AI_INVESTIGATION_QUEUE_CAPACITY:100}
+    timeout-ms: ${LABWATCH_AI_INVESTIGATION_TIMEOUT_MS:15000}

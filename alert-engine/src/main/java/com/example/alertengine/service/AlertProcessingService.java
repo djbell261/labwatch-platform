@@ -5,6 +5,10 @@ import com.example.alertengine.dto.HealthEventMessage;
 import com.example.alertengine.entity.Alert;
 import com.example.alertengine.kafka.AlertEventProducer;
 import com.example.alertengine.repository.AlertRepository;
+import io.micrometer.core.instrument.MeterRegistry;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.stereotype.Service;
 
 import java.time.Duration;
@@ -14,14 +18,21 @@ import java.util.Optional;
 @Service
 public class AlertProcessingService {
 
+    private static final Logger log = LoggerFactory.getLogger(AlertProcessingService.class);
     private static final long MIN_ACTIVE_DURATION_SECONDS = 60;
 
     private final AlertRepository alertRepository;
     private final AlertEventProducer alertEventProducer;
+    private final MeterRegistry meterRegistry;
 
-    public AlertProcessingService(AlertRepository alertRepository, AlertEventProducer alertEventProducer) {
+    public AlertProcessingService(
+            AlertRepository alertRepository,
+            AlertEventProducer alertEventProducer,
+            MeterRegistry meterRegistry
+    ) {
         this.alertRepository = alertRepository;
         this.alertEventProducer = alertEventProducer;
+        this.meterRegistry = meterRegistry;
     }
 
     public void processHealthEvent(HealthEventMessage eventMessage) {
@@ -55,7 +66,7 @@ public class AlertProcessingService {
                 alertMessage = "Disk usage exceeded threshold";
             }
             default -> {
-                System.out.println("Skipping unsupported event type: " + eventType);
+                log.info("event=alert_skipped reason=unsupported_event_type eventType={}", eventType);
                 return;
             }
         }
@@ -81,10 +92,10 @@ public class AlertProcessingService {
             Optional<Alert> existingActiveAlert
     ) {
         if (existingActiveAlert.isPresent()) {
-            System.out.println(
-                    "Duplicate alert skipped for machine " +
-                            eventMessage.getMachineIdentifier() +
-                            " and alert type " + alertType
+            log.info(
+                    "event=alert_duplicate_skipped machineIdentifier={} alertType={}",
+                    eventMessage.getMachineIdentifier(),
+                    alertType
             );
             return;
         }
@@ -100,14 +111,29 @@ public class AlertProcessingService {
         alert.setStatus("ACTIVE");
         alert.setCreatedAt(LocalDateTime.now());
 
-        Alert savedAlert = alertRepository.save(alert);
-        alertEventProducer.publish(toAlertEventMessage(savedAlert, eventMessage));
-
-        System.out.println(
-                "Created ACTIVE alert for machine " +
-                        eventMessage.getMachineIdentifier() +
-                        " and alert type " + alertType
-        );
+        try {
+            Alert savedAlert = alertRepository.saveAndFlush(alert);
+            meterRegistry.counter("labwatch.alerts.created", "alertType", alertType).increment();
+            alertEventProducer.publish(toAlertEventMessage(savedAlert, eventMessage));
+            log.info(
+                    "event=alert_created machineIdentifier={} alertType={} severity={}",
+                    eventMessage.getMachineIdentifier(),
+                    alertType,
+                    severity
+            );
+        } catch (DataIntegrityViolationException exception) {
+            Alert existingAlert = alertRepository.findFirstByMachineIdAndAlertTypeAndStatus(
+                    eventMessage.getMachineId(),
+                    alertType,
+                    "ACTIVE"
+            ).orElse(null);
+            log.info(
+                    "event=alert_duplicate_race machineIdentifier={} alertType={} existingAlertId={}",
+                    eventMessage.getMachineIdentifier(),
+                    alertType,
+                    existingAlert != null ? existingAlert.getId() : "unknown"
+            );
+        }
     }
 
     private void handleAlertResolution(
@@ -116,10 +142,10 @@ public class AlertProcessingService {
             Optional<Alert> existingActiveAlert
     ) {
         if (existingActiveAlert.isEmpty()) {
-            System.out.println(
-                    "No ACTIVE alert to resolve for machine " +
-                            eventMessage.getMachineIdentifier() +
-                            " and alert type " + alertType
+            log.info(
+                    "event=alert_resolution_skipped reason=no_active_alert machineIdentifier={} alertType={}",
+                    eventMessage.getMachineIdentifier(),
+                    alertType
             );
             return;
         }
@@ -129,13 +155,12 @@ public class AlertProcessingService {
         long activeDurationSeconds = Duration.between(alert.getCreatedAt(), now).getSeconds();
 
         if (activeDurationSeconds < MIN_ACTIVE_DURATION_SECONDS) {
-            System.out.println(
-                    "Resolution delayed for machine " +
-                            eventMessage.getMachineIdentifier() +
-                            " and alert type " + alertType +
-                            " because ACTIVE duration is only " +
-                            activeDurationSeconds +
-                            " seconds"
+            log.info(
+                    "event=alert_resolution_delayed machineIdentifier={} alertType={} activeDurationSeconds={} minimumActiveDurationSeconds={}",
+                    eventMessage.getMachineIdentifier(),
+                    alertType,
+                    activeDurationSeconds,
+                    MIN_ACTIVE_DURATION_SECONDS
             );
             return;
         }
@@ -144,11 +169,11 @@ public class AlertProcessingService {
         alert.setResolvedAt(now);
 
         alertRepository.save(alert);
-
-        System.out.println(
-                "Resolved alert for machine " +
-                        eventMessage.getMachineIdentifier() +
-                        " and alert type " + alertType
+        meterRegistry.counter("labwatch.alerts.resolved", "alertType", alertType).increment();
+        log.info(
+                "event=alert_resolved machineIdentifier={} alertType={}",
+                eventMessage.getMachineIdentifier(),
+                alertType
         );
     }
 

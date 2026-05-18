@@ -9,13 +9,23 @@ import com.example.aiengineservice.entity.AiInvestigationEntity;
 import com.example.aiengineservice.entity.Anomaly;
 import com.example.aiengineservice.kafka.AiInvestigationEventProducer;
 import com.example.aiengineservice.repository.AiInvestigationRepository;
+import io.micrometer.core.instrument.MeterRegistry;
+import io.micrometer.core.instrument.Timer;
+import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.annotation.Qualifier;
+import org.springframework.beans.factory.annotation.Value;
+import org.springframework.core.task.TaskRejectedException;
 import org.springframework.stereotype.Service;
 
 import java.time.Clock;
 import java.time.LocalDateTime;
 import java.time.ZoneOffset;
+import java.util.concurrent.Executor;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.TimeUnit;
 import java.util.List;
 import java.util.Set;
 import java.util.UUID;
@@ -32,14 +42,21 @@ public class AiInvestigationService {
     private final AiInvestigationEventProducer aiInvestigationEventProducer;
     private final AiInvestigationRepository aiInvestigationRepository;
     private final Clock clock;
+    private final Executor aiInvestigationExecutor;
+    private final MeterRegistry meterRegistry;
+    private final long timeoutMs;
 
+    @Autowired
     public AiInvestigationService(
             AiProvider aiProvider,
             AiInsightRequestBuilder aiInsightRequestBuilder,
             AiInvestigationContextBuilder contextBuilder,
             AiInvestigationEventProducer aiInvestigationEventProducer,
             AiInvestigationRepository aiInvestigationRepository,
-            Clock clock
+            Clock clock,
+            @Qualifier("aiInvestigationExecutor") Executor aiInvestigationExecutor,
+            MeterRegistry meterRegistry,
+            @Value("${app.ai-investigation.timeout-ms:15000}") long timeoutMs
     ) {
         this.aiProvider = aiProvider;
         this.aiInsightRequestBuilder = aiInsightRequestBuilder;
@@ -47,38 +64,107 @@ public class AiInvestigationService {
         this.aiInvestigationEventProducer = aiInvestigationEventProducer;
         this.aiInvestigationRepository = aiInvestigationRepository;
         this.clock = clock;
+        this.aiInvestigationExecutor = aiInvestigationExecutor;
+        this.meterRegistry = meterRegistry;
+        this.timeoutMs = timeoutMs;
+    }
+
+    AiInvestigationService(
+            AiProvider aiProvider,
+            AiInsightRequestBuilder aiInsightRequestBuilder,
+            AiInvestigationContextBuilder contextBuilder,
+            AiInvestigationEventProducer aiInvestigationEventProducer,
+            AiInvestigationRepository aiInvestigationRepository,
+            Clock clock
+    ) {
+        this(
+                aiProvider,
+                aiInsightRequestBuilder,
+                contextBuilder,
+                aiInvestigationEventProducer,
+                aiInvestigationRepository,
+                clock,
+                Runnable::run,
+                new SimpleMeterRegistry(),
+                15_000L
+        );
     }
 
     public void processAlertEvent(AlertEventMessage alertEventMessage) {
-        log.info(
-                "Received alert event for AI investigation for machine {} severity {} status {}",
-                alertEventMessage != null ? alertEventMessage.getMachineIdentifier() : "unknown",
-                alertEventMessage != null ? alertEventMessage.getSeverity() : "unknown",
-                alertEventMessage != null ? alertEventMessage.getStatus() : "unknown"
-        );
-
         if (!qualifies(alertEventMessage)) {
             log.info("Skipping alert event because it does not qualify for AI investigation");
             return;
         }
 
-        AiInvestigationEvent aiInvestigationEvent = generateInvestigation(alertEventMessage);
-        persistInvestigation(aiInvestigationEvent);
         try {
-            log.info("Publishing AI investigation event");
-            aiInvestigationEventProducer.publish(aiInvestigationEvent);
-        } catch (Exception exception) {
-            log.error("Failed to publish AI investigation event", exception);
+            CompletableFuture.runAsync(() -> processAlertEventInternal(alertEventMessage), aiInvestigationExecutor)
+                    .orTimeout(timeoutMs, TimeUnit.MILLISECONDS)
+                    .exceptionally(exception -> {
+                        meterRegistry.counter("labwatch.ai.investigations.failed", "stage", "async").increment();
+                        log.error(
+                                "event=ai_investigation_async_failure machineIdentifier={} alertType={} error={}",
+                                alertEventMessage != null ? alertEventMessage.getMachineIdentifier() : "unknown",
+                                alertEventMessage != null ? alertEventMessage.getAlertType() : "unknown",
+                                exception.getClass().getSimpleName(),
+                                exception
+                        );
+                        return null;
+                    });
+            meterRegistry.counter("labwatch.ai.investigations.started").increment();
+        } catch (TaskRejectedException exception) {
+            meterRegistry.counter("labwatch.ai.investigations.failed", "stage", "submission").increment();
+            log.error(
+                    "event=ai_investigation_rejected machineIdentifier={} alertType={} error={}",
+                    alertEventMessage != null ? alertEventMessage.getMachineIdentifier() : "unknown",
+                    alertEventMessage != null ? alertEventMessage.getAlertType() : "unknown",
+                    exception.getClass().getSimpleName(),
+                    exception
+            );
+            throw exception;
         }
     }
 
-    private void persistInvestigation(AiInvestigationEvent aiInvestigationEvent) {
+    private void processAlertEventInternal(AlertEventMessage alertEventMessage) {
+        Timer.Sample sample = Timer.start(meterRegistry);
+        log.info(
+                "event=ai_investigation_received machineIdentifier={} severity={} status={}",
+                alertEventMessage != null ? alertEventMessage.getMachineIdentifier() : "unknown",
+                alertEventMessage != null ? alertEventMessage.getSeverity() : "unknown",
+                alertEventMessage != null ? alertEventMessage.getStatus() : "unknown"
+        );
+
+        try {
+            AiInvestigationEvent aiInvestigationEvent = generateInvestigation(alertEventMessage);
+            boolean persisted = persistInvestigation(aiInvestigationEvent);
+            if (!persisted) {
+                meterRegistry.counter("labwatch.ai.investigations.failed", "stage", "persistence").increment();
+            }
+            log.info("Publishing AI investigation event");
+            aiInvestigationEventProducer.publish(aiInvestigationEvent);
+            meterRegistry.counter("labwatch.ai.investigations.completed").increment();
+            sample.stop(meterRegistry.timer("labwatch.ai.investigation.latency"));
+        } catch (Exception exception) {
+            meterRegistry.counter("labwatch.ai.investigations.failed", "stage", "execution").increment();
+            sample.stop(meterRegistry.timer("labwatch.ai.investigation.latency"));
+            log.error(
+                    "event=ai_investigation_failed machineIdentifier={} alertType={} error={}",
+                    alertEventMessage != null ? alertEventMessage.getMachineIdentifier() : "unknown",
+                    alertEventMessage != null ? alertEventMessage.getAlertType() : "unknown",
+                    exception.getClass().getSimpleName(),
+                    exception
+            );
+        }
+    }
+
+    private boolean persistInvestigation(AiInvestigationEvent aiInvestigationEvent) {
         try {
             log.info("Persisting AI investigation");
             aiInvestigationRepository.save(toEntity(aiInvestigationEvent));
             log.info("AI investigation persisted successfully");
+            return true;
         } catch (Exception exception) {
             log.error("Failed to persist AI investigation", exception);
+            return false;
         }
     }
 

@@ -10,29 +10,30 @@ import {
 } from "react-router-dom";
 import AppShell from "./components/AppShell";
 import ProtectedRoute from "./components/ProtectedRoute";
+import PublicOnlyRoute from "./components/PublicOnlyRoute";
+import PublicShell from "./components/PublicShell";
+import RoleGuard from "./components/RoleGuard";
 import { useAuth } from "./context/AuthContext";
 import AnomalyDetailPage from "./pages/AnomalyDetailPage";
 import AnomaliesPage from "./pages/AnomaliesPage";
 import AssistantPage from "./pages/AssistantPage";
 import DashboardPage from "./pages/DashboardPage";
+import HomePage from "./pages/HomePage";
 import IncidentDetailPage from "./pages/IncidentDetailPage";
 import IncidentsPage from "./pages/IncidentsPage";
 import LoginPage from "./pages/LoginPage";
 import MachineDetailPage from "./pages/MachineDetailPage";
 import MachinesPage from "./pages/MachinesPage";
 import RegisterPage from "./pages/RegisterPage";
+import UnauthorizedPage from "./pages/UnauthorizedPage";
 
 function LoginRoute() {
   const location = useLocation();
   const navigate = useNavigate();
-  const { authEnabled, isAuthenticated, login } = useAuth();
+  const { authEnabled, isAuthenticated, login, sessionNotice } = useAuth();
   const [authLoading, setAuthLoading] = useState(false);
   const [authError, setAuthError] = useState("");
   const fromPath = location.state?.from?.pathname || "/dashboard";
-
-  if (!authEnabled) {
-    return <Navigate replace to="/dashboard" />;
-  }
 
   if (isAuthenticated) {
     return <Navigate replace to={fromPath} />;
@@ -53,9 +54,12 @@ function LoginRoute() {
 
   return (
     <LoginPage
+      authDisabled={!authEnabled}
       error={authError}
       loading={authLoading}
-      onShowRegister={() => navigate("/register")}
+      notice={sessionNotice}
+      onContinueToDashboard={() => navigate("/dashboard")}
+      onShowRegister={() => navigate("/signup")}
       onSubmit={handleLogin}
     />
   );
@@ -63,13 +67,9 @@ function LoginRoute() {
 
 function RegisterRoute() {
   const navigate = useNavigate();
-  const { authEnabled, isAuthenticated, register } = useAuth();
+  const { authEnabled, isAuthenticated, register, sessionNotice } = useAuth();
   const [authLoading, setAuthLoading] = useState(false);
   const [authError, setAuthError] = useState("");
-
-  if (!authEnabled) {
-    return <Navigate replace to="/dashboard" />;
-  }
 
   if (isAuthenticated) {
     return <Navigate replace to="/dashboard" />;
@@ -90,8 +90,11 @@ function RegisterRoute() {
 
   return (
     <RegisterPage
+      authDisabled={!authEnabled}
       error={authError}
       loading={authLoading}
+      notice={sessionNotice}
+      onContinueToDashboard={() => navigate("/dashboard")}
       onShowLogin={() => navigate("/login")}
       onSubmit={handleRegister}
     />
@@ -116,29 +119,46 @@ function AppRouter() {
   const { authReady } = useAuth();
 
   if (!authReady) {
-    return <div style={{ color: "#ffffff", minHeight: "100vh", display: "grid", placeItems: "center" }}>Loading LabWatch...</div>;
+    return (
+      <div className="app-boot-splash">
+        <div className="app-boot-card">
+          <div className="app-boot-badge">LabWatch</div>
+          <h1>Restoring session...</h1>
+          <p>Preparing your monitoring workspace and auth state.</p>
+        </div>
+      </div>
+    );
   }
 
   return (
     <Routes>
-      <Route path="/login" element={<LoginRoute />} />
-      <Route path="/register" element={<RegisterRoute />} />
-
-      <Route element={<ProtectedRoute />}>
-        <Route element={<AppShell />}>
-          <Route index element={<Navigate replace to="/dashboard" />} />
-          <Route path="/dashboard" element={<DashboardPage />} />
-          <Route path="/incidents" element={<IncidentsPage />} />
-          <Route path="/incidents/:investigationId" element={<IncidentDetailRoute />} />
-          <Route path="/anomalies" element={<AnomaliesPage />} />
-          <Route path="/anomalies/:anomalyId" element={<AnomalyDetailPage />} />
-          <Route path="/machines" element={<MachinesPage />} />
-          <Route path="/machines/:machineIdentifier" element={<MachineDetailPage />} />
-          <Route path="/assistant" element={<AssistantPage />} />
+      <Route element={<PublicShell />}>
+        <Route path="/" element={<HomePage />} />
+        <Route element={<PublicOnlyRoute />}>
+          <Route path="/login" element={<LoginRoute />} />
+          <Route path="/signup" element={<RegisterRoute />} />
         </Route>
       </Route>
 
-      <Route path="*" element={<Navigate replace to="/dashboard" />} />
+      <Route path="/register" element={<Navigate replace to="/signup" />} />
+
+      <Route element={<ProtectedRoute />}>
+        <Route element={<RoleGuard allowedRoles={["ADMIN", "OPERATOR"]} />}>
+          <Route element={<AppShell />}>
+            <Route path="/dashboard" element={<DashboardPage />} />
+            <Route path="/incidents" element={<IncidentsPage />} />
+            <Route path="/incidents/:investigationId" element={<IncidentDetailRoute />} />
+            <Route path="/anomalies" element={<AnomaliesPage />} />
+            <Route path="/anomalies/:anomalyId" element={<AnomalyDetailPage />} />
+            <Route path="/machines" element={<MachinesPage />} />
+            <Route path="/machines/:machineIdentifier" element={<MachineDetailPage />} />
+            <Route path="/assistant" element={<AssistantPage />} />
+            <Route path="/unauthorized" element={<UnauthorizedPage />} />
+          </Route>
+        </Route>
+      </Route>
+
+      <Route path="*" element={<Navigate replace to="/" />} />
     </Routes>
   );
 }

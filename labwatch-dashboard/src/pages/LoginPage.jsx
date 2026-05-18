@@ -1,104 +1,81 @@
 import { useState } from "react";
 
-function LoginPage({ onSubmit, onShowRegister, loading = false, error = "" }) {
+function LoginPage({
+  onSubmit,
+  onShowRegister,
+  onContinueToDashboard,
+  loading = false,
+  error = "",
+  notice = "",
+  authDisabled = false,
+}) {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
 
   return (
-    <main
-      style={{
-        alignItems: "center",
-        color: "#ffffff",
-        display: "flex",
-        justifyContent: "center",
-        minHeight: "100vh",
-        padding: "24px",
-      }}
-    >
-      <section
-        style={{
-          background: "rgba(15, 23, 42, 0.86)",
-          border: "1px solid rgba(148, 163, 184, 0.16)",
-          borderRadius: "28px",
-          boxShadow: "0 24px 60px rgba(2, 6, 23, 0.4)",
-          maxWidth: "420px",
-          padding: "28px",
-          width: "100%",
-        }}
-      >
-        <div style={{ color: "#38bdf8", fontSize: "0.85rem", fontWeight: 700, letterSpacing: "0.12em", textTransform: "uppercase" }}>
+    <section className="auth-page">
+      <div className="auth-card">
+        <div className="auth-kicker">
           LabWatch Auth
         </div>
-        <h1 style={{ fontSize: "2rem", marginBottom: "10px" }}>Sign in</h1>
-        <p style={{ color: "#94a3b8", lineHeight: 1.6, marginBottom: "18px" }}>
-          Continue to your machines, telemetry, alerts, and AI monitoring workspace.
+        <h1 className="auth-title">Sign in</h1>
+        <p className="auth-copy">
+          {authDisabled
+            ? "Authentication is disabled for this local demo environment."
+            : "Continue to your machines, telemetry, alerts, and AI monitoring workspace."}
         </p>
 
-        <form
-          onSubmit={(event) => {
-            event.preventDefault();
-            onSubmit({ email, password });
-          }}
-          style={{ display: "grid", gap: "14px" }}
-        >
-          <input
-            type="email"
-            placeholder="Email"
-            value={email}
-            onChange={(event) => setEmail(event.target.value)}
-            style={inputStyle}
-          />
-          <input
-            type="password"
-            placeholder="Password"
-            value={password}
-            onChange={(event) => setPassword(event.target.value)}
-            style={inputStyle}
-          />
-          {error ? <div style={{ color: "#fca5a5", fontSize: "0.92rem" }}>{error}</div> : null}
-          <button type="submit" disabled={loading} style={primaryButtonStyle(loading)}>
-            {loading ? "Signing in..." : "Login"}
-          </button>
-        </form>
+        {notice ? <div className="auth-notice">{notice}</div> : null}
+
+        {authDisabled ? (
+          <div className="auth-demo-state">
+            <div className="auth-demo-message">
+              Local mode keeps the operational app open without requiring credentials. You can still preview the auth
+              entry experience here.
+            </div>
+            <button type="button" className="auth-submit-button" onClick={onContinueToDashboard}>
+              Continue to Dashboard
+            </button>
+          </div>
+        ) : (
+          <form
+            onSubmit={(event) => {
+              event.preventDefault();
+              onSubmit({ email, password });
+            }}
+            className="auth-form"
+          >
+            <input
+              type="email"
+              placeholder="Email"
+              value={email}
+              onChange={(event) => setEmail(event.target.value)}
+              className="auth-input"
+            />
+            <input
+              type="password"
+              placeholder="Password"
+              value={password}
+              onChange={(event) => setPassword(event.target.value)}
+              className="auth-input"
+            />
+            {error ? <div className="auth-error">{error}</div> : null}
+            <button type="submit" disabled={loading} className={`auth-submit-button ${loading ? "is-loading" : ""}`}>
+              {loading ? "Signing in..." : "Login"}
+            </button>
+          </form>
+        )}
 
         <button
           type="button"
           onClick={onShowRegister}
-          style={{
-            background: "transparent",
-            border: "none",
-            color: "#c4b5fd",
-            cursor: "pointer",
-            marginTop: "16px",
-            padding: 0,
-          }}
+          className="auth-secondary-link"
         >
-          Need an account? Register
+          Need an account? Sign Up
         </button>
-      </section>
-    </main>
+      </div>
+    </section>
   );
-}
-
-const inputStyle = {
-  background: "rgba(15, 23, 42, 0.9)",
-  border: "1px solid rgba(148, 163, 184, 0.18)",
-  borderRadius: "14px",
-  color: "#e2e8f0",
-  outline: "none",
-  padding: "12px 14px",
-};
-
-function primaryButtonStyle(loading) {
-  return {
-    background: loading ? "rgba(71, 85, 105, 0.7)" : "linear-gradient(135deg, #38bdf8, #8b5cf6)",
-    border: "none",
-    borderRadius: "14px",
-    color: "#ffffff",
-    cursor: loading ? "not-allowed" : "pointer",
-    fontWeight: 700,
-    padding: "12px 14px",
-  };
 }
 
 export default LoginPage;

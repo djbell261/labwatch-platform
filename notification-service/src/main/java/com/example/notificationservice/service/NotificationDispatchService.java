@@ -4,8 +4,11 @@ import com.example.notificationservice.config.NotificationProperties;
 import com.example.notificationservice.dto.AlertEventMessage;
 import com.example.notificationservice.service.channel.NotificationChannel;
 import com.example.notificationservice.service.cooldown.NotificationCooldownStore;
+import io.micrometer.core.instrument.MeterRegistry;
+import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
 import java.time.Clock;
@@ -26,17 +29,36 @@ public class NotificationDispatchService {
     private final NotificationCooldownStore notificationCooldownStore;
     private final NotificationProperties notificationProperties;
     private final Clock clock;
+    private final MeterRegistry meterRegistry;
 
+    @Autowired
     public NotificationDispatchService(
             List<NotificationChannel> notificationChannels,
             NotificationCooldownStore notificationCooldownStore,
             NotificationProperties notificationProperties,
-            Clock clock
+            Clock clock,
+            MeterRegistry meterRegistry
     ) {
         this.notificationChannels = notificationChannels;
         this.notificationCooldownStore = notificationCooldownStore;
         this.notificationProperties = notificationProperties;
         this.clock = clock;
+        this.meterRegistry = meterRegistry;
+    }
+
+    NotificationDispatchService(
+            List<? extends NotificationChannel> notificationChannels,
+            NotificationCooldownStore notificationCooldownStore,
+            NotificationProperties notificationProperties,
+            Clock clock
+    ) {
+        this(
+                List.copyOf(notificationChannels),
+                notificationCooldownStore,
+                notificationProperties,
+                clock,
+                new SimpleMeterRegistry()
+        );
     }
 
     public void dispatchAlertNotification(AlertEventMessage alertEventMessage) {
@@ -55,25 +77,51 @@ public class NotificationDispatchService {
 
         String dedupeKey = dedupeKey(alertEventMessage, severity);
         Instant now = clock.instant();
-        Instant lastSentAt = notificationCooldownStore.getLastSentAt(dedupeKey);
         Duration cooldown = Duration.ofSeconds(notificationProperties.getCooldownSeconds());
 
-        if (lastSentAt != null && Duration.between(lastSentAt, now).compareTo(cooldown) < 0) {
-            log.info("Skipping duplicate notification due to cooldown");
+        if (!notificationCooldownStore.tryAcquire(dedupeKey, now, cooldown)) {
+            log.info("event=notification_skipped reason=cooldown dedupeKey={}", dedupeKey);
             return;
         }
 
-        log.info("Dispatching notification for {} alert", severity);
+        log.info("event=notification_dispatch_started severity={} dedupeKey={}", severity, dedupeKey);
 
-        boolean dispatched = false;
+        boolean deliveredAtLeastOnce = false;
         for (NotificationChannel notificationChannel : notificationChannels) {
-            notificationChannel.dispatch(alertEventMessage);
-            log.info("Notification dispatched through {}", notificationChannel.channelName());
-            dispatched = true;
+            try {
+                boolean delivered = notificationChannel.dispatchWithResult(alertEventMessage);
+                if (delivered) {
+                    deliveredAtLeastOnce = true;
+                    meterRegistry.counter("labwatch.notifications.sent", "channel", notificationChannel.channelName()).increment();
+                    log.info(
+                            "event=notification_dispatched channel={} machineIdentifier={} alertType={}",
+                            notificationChannel.channelName(),
+                            alertEventMessage.getMachineIdentifier(),
+                            alertEventMessage.getAlertType()
+                    );
+                } else {
+                    log.info(
+                            "event=notification_channel_skipped channel={} machineIdentifier={} alertType={}",
+                            notificationChannel.channelName(),
+                            alertEventMessage.getMachineIdentifier(),
+                            alertEventMessage.getAlertType()
+                    );
+                }
+            } catch (Exception exception) {
+                meterRegistry.counter("labwatch.notifications.failed", "channel", notificationChannel.channelName()).increment();
+                log.error(
+                        "event=notification_failed channel={} machineIdentifier={} alertType={} error={}",
+                        notificationChannel.channelName(),
+                        alertEventMessage.getMachineIdentifier(),
+                        alertEventMessage.getAlertType(),
+                        exception.getClass().getSimpleName(),
+                        exception
+                );
+            }
         }
 
-        if (dispatched) {
-            notificationCooldownStore.markSent(dedupeKey, now);
+        if (!deliveredAtLeastOnce) {
+            notificationCooldownStore.release(dedupeKey);
         }
     }
 

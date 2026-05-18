@@ -102,7 +102,15 @@ Uses a rolling window with configurable minimum samples and z-score threshold to
 
 ### Run everything
 
-docker compose up --build
+```bash
+docker compose up --build -d
+```
+
+### Seed demo telemetry
+
+```bash
+./scripts/seed-demo-telemetry.sh
+```
 
 ## Services
 
@@ -188,6 +196,25 @@ Requires `Authorization: Bearer <jwt>`.
 - Multi-user account ownership for machines
 - Observability (metrics + logging)
 - Cloud deployment (AWS)
+
+## Deployment Readiness
+
+- Deployment and demo environment notes: [docs/DEPLOYMENT_READINESS.md](/Users/derwinbell/dev/ResumeProjects/labwatch-platform/docs/DEPLOYMENT_READINESS.md)
+- Backend stability runbook: [docs/STABILITY_TESTING.md](/Users/derwinbell/dev/ResumeProjects/labwatch-platform/docs/STABILITY_TESTING.md)
+
+### Local demo mode
+
+- `LABWATCH_AUTH_ENABLED=false`
+- `AI_PROVIDER=mock`
+- Landing page still shows auth/product entry points
+- Dashboard remains directly accessible for recruiter demos
+
+### Auth-enabled MVP mode
+
+- `LABWATCH_AUTH_ENABLED=true`
+- JWT auth is active
+- first registered user becomes `ADMIN`
+- later users default to `OPERATOR`
 
 ## Auth Modes
 

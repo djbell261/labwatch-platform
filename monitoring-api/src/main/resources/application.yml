@@ -30,6 +30,8 @@ logging:
   level:
     root: ${LOGGING_LEVEL_ROOT:INFO}
     org.springframework: ${LOGGING_LEVEL_ORG_SPRINGFRAMEWORK:INFO}
+  pattern:
+    console: "%d{yyyy-MM-dd'T'HH:mm:ss.SSSXXX} %-5level service=${spring.application.name} requestId=%X{requestId:-na} userId=%X{userId:-anon} [%thread] %logger{36} - %msg%n"
 
 management:
   endpoints:
@@ -51,6 +53,7 @@ app:
 labwatch:
   auth:
     enabled: ${LABWATCH_AUTH_ENABLED:false}
+    allowed-origins: ${LABWATCH_ALLOWED_ORIGINS:http://localhost:5173,http://127.0.0.1:5173}
   agent-auth:
     enabled: ${LABWATCH_AGENT_AUTH_ENABLED:false}
 

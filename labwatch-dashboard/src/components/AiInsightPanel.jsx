@@ -38,6 +38,9 @@ function AiInsightPanel({
   onInvestigateWithAi,
   onAskAboutTopIssue,
   onAskAboutTopProcess,
+  cardLabel = "AI Snapshot",
+  title = "Current Assessment",
+  actionButtons = [],
 }) {
   const insight = buildInsightModel(latestTelemetry, alerts, anomalies);
 
@@ -45,8 +48,8 @@ function AiInsightPanel({
     <section className="surface-card section-card">
       <div className="section-header">
         <div>
-          <div className="card-label">AI Snapshot</div>
-          <h2 className="section-title">Current Assessment</h2>
+          <div className="card-label">{cardLabel}</div>
+          <h2 className="section-title">{title}</h2>
         </div>
         <div className={`status-pill ${insight.statusTone}`}>
           <span className={`status-dot ${insight.statusTone}`} />
@@ -79,6 +82,25 @@ function AiInsightPanel({
           />
         </div>
       )}
+
+      {actionButtons.length > 0 ? (
+        <div className="quick-actions-grid">
+          {actionButtons.map((action, index) => (
+            <button
+              key={action.label}
+              type="button"
+              className={`quick-action-button ${index === 0 ? "primary-ai-cta" : ""}`}
+              onClick={action.onClick}
+            >
+              <div className="quick-action-copy">
+                <span className="quick-action-title">{action.label}</span>
+                {action.description ? <span className="quick-action-subtitle">{action.description}</span> : null}
+              </div>
+              <span>→</span>
+            </button>
+          ))}
+        </div>
+      ) : null}
 
       <div className="machine-card-subtle">
         Source: {insightSource === "backend" ? "AI service" : "Local fallback"}

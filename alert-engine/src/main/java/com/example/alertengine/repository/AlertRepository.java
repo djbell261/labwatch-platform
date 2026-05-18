@@ -10,6 +10,8 @@ public interface AlertRepository extends JpaRepository<Alert, Long> {
 
     Optional<Alert> findByMachineIdAndAlertTypeAndStatus(Long machineId, String alertType, String status);
 
+    Optional<Alert> findFirstByMachineIdAndAlertTypeAndStatus(Long machineId, String alertType, String status);
+
     List<Alert> findByStatus(String status);
 
     List<Alert> findByMachineId(Long machineId);

@@ -5,6 +5,12 @@ spring:
   application:
     name: notification-service
 
+  data:
+    redis:
+      host: ${SPRING_DATA_REDIS_HOST:localhost}
+      port: ${SPRING_DATA_REDIS_PORT:6379}
+      timeout: ${SPRING_DATA_REDIS_TIMEOUT:2s}
+
   kafka:
     bootstrap-servers: ${SPRING_KAFKA_BOOTSTRAP_SERVERS:${KAFKA_BOOTSTRAP_SERVERS:localhost:9092}}
     consumer:
@@ -41,6 +47,8 @@ logging:
   level:
     root: ${LOGGING_LEVEL_ROOT:INFO}
     org.springframework: ${LOGGING_LEVEL_ORG_SPRINGFRAMEWORK:INFO}
+  pattern:
+    console: "%d{yyyy-MM-dd'T'HH:mm:ss.SSSXXX} %-5level service=${spring.application.name} requestId=%X{requestId:-na} userId=%X{userId:-anon} [%thread] %logger{36} - %msg%n"
 
 management:
   endpoints:
@@ -53,12 +61,20 @@ management:
   metrics:
     tags:
       application: ${spring.application.name}
+  health:
+    mail:
+      enabled: false
 
 app:
   kafka:
+    retry:
+      attempts: ${LABWATCH_KAFKA_RETRY_ATTEMPTS:3}
+      backoff-ms: ${LABWATCH_KAFKA_RETRY_BACKOFF_MS:1000}
     topic:
       alert-events: ${ALERT_EVENTS_TOPIC:alert-events}
       ai-investigation-events: ${AI_INVESTIGATION_EVENTS_TOPIC:ai-investigation-events}
+      alert-events-dlt: ${ALERT_EVENTS_DLT_TOPIC:alert-events.notification-service.dlt}
+      ai-investigation-events-dlt: ${AI_INVESTIGATION_EVENTS_DLT_TOPIC:ai-investigation-events.notification-service.dlt}
 
 labwatch:
   notifications:

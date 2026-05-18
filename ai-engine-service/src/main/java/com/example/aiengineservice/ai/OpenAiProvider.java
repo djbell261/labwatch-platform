@@ -4,6 +4,7 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
 import org.springframework.stereotype.Component;
+import org.springframework.http.client.SimpleClientHttpRequestFactory;
 import org.springframework.web.client.RestClient;
 
 import java.util.List;
@@ -19,13 +20,18 @@ public class OpenAiProvider implements AiProvider {
     public OpenAiProvider(
             @Value("${OPENAI_API_KEY:}") String apiKey,
             @Value("${ai.openai.model:gpt-4o-mini}") String model,
-            @Value("${ai.openai.base-url:https://api.openai.com}") String baseUrl
+            @Value("${ai.openai.base-url:https://api.openai.com}") String baseUrl,
+            @Value("${app.ai-investigation.timeout-ms:15000}") int timeoutMs
     ) {
         this.apiKey = apiKey;
         this.model = model;
+        SimpleClientHttpRequestFactory requestFactory = new SimpleClientHttpRequestFactory();
+        requestFactory.setConnectTimeout(timeoutMs);
+        requestFactory.setReadTimeout(timeoutMs);
         this.restClient = RestClient.builder()
                 .baseUrl(baseUrl)
                 .defaultHeader(HttpHeaders.CONTENT_TYPE, MediaType.APPLICATION_JSON_VALUE)
+                .requestFactory(requestFactory)
                 .build();
     }
 

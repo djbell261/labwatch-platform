@@ -1,6 +1,7 @@
 import axios from "axios";
 
 const AUTH_STORAGE_KEY = "labwatch.auth";
+const AUTH_INVALIDATED_EVENT = "labwatch:auth-invalidated";
 
 const monitoringApi = axios.create({
   baseURL: "http://localhost:8089",
@@ -17,29 +18,83 @@ const anomaliesApi = axios.create({
   timeout: 8000,
 });
 
-function getStoredToken() {
+function readStoredAuth() {
   try {
     const rawValue = window.localStorage.getItem(AUTH_STORAGE_KEY);
     if (!rawValue) {
-      return "";
+      return null;
     }
 
-    const parsed = JSON.parse(rawValue);
-    return typeof parsed?.token === "string" ? parsed.token : "";
+    return JSON.parse(rawValue);
   } catch {
-    return "";
+    return null;
   }
+}
+
+function isExpired(expiresAt) {
+  if (!expiresAt) {
+    return false;
+  }
+
+  const timestamp = new Date(expiresAt).getTime();
+  if (Number.isNaN(timestamp)) {
+    return false;
+  }
+
+  return timestamp <= Date.now();
+}
+
+function invalidateStoredAuth(reason = "invalid_session") {
+  try {
+    window.localStorage.removeItem(AUTH_STORAGE_KEY);
+    window.dispatchEvent(new CustomEvent(AUTH_INVALIDATED_EVENT, { detail: { reason } }));
+  } catch {
+    window.localStorage.removeItem(AUTH_STORAGE_KEY);
+  }
+}
+
+function shouldInvalidateFromResponse(error) {
+  const statusCode = error?.response?.status ?? 0;
+  if (statusCode !== 401 && statusCode !== 403) {
+    return false;
+  }
+
+  const requestUrl = extractRequestUrl({
+    baseURL: error?.config?.baseURL,
+    url: error?.config?.url,
+  });
+
+  return !requestUrl.includes("/api/v1/auth/login")
+    && !requestUrl.includes("/api/v1/auth/register")
+    && !requestUrl.includes("/api/v1/auth/config");
 }
 
 [monitoringApi, alertsApi, anomaliesApi].forEach((client) => {
   client.interceptors.request.use((config) => {
-    const token = getStoredToken();
+    const storedAuth = readStoredAuth();
+    if (isExpired(storedAuth?.expiresAt)) {
+      invalidateStoredAuth("expired_session");
+      return config;
+    }
+
+    const token = typeof storedAuth?.token === "string" ? storedAuth.token : "";
     if (token) {
       config.headers = config.headers || {};
       config.headers.Authorization = `Bearer ${token}`;
     }
     return config;
   });
+
+  client.interceptors.response.use(
+    (response) => response,
+    (error) => {
+      if (shouldInvalidateFromResponse(error)) {
+        const statusCode = error?.response?.status ?? 0;
+        invalidateStoredAuth(statusCode === 401 ? "expired_session" : "access_denied");
+      }
+      return Promise.reject(error);
+    }
+  );
 });
 
 function extractRequestUrl(config = {}) {
@@ -217,4 +272,4 @@ export async function sendChatMessage(message, machineIdentifier = "") {
   }
 }
 
-export { AUTH_STORAGE_KEY, monitoringApi, alertsApi, anomaliesApi };
+export { AUTH_STORAGE_KEY, AUTH_INVALIDATED_EVENT, monitoringApi, alertsApi, anomaliesApi };

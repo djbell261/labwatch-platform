@@ -39,29 +39,35 @@ public class EmailNotificationChannel implements NotificationChannel {
 
     @Override
     public void dispatch(AlertEventMessage alertEventMessage) {
+        try {
+            dispatchWithResult(alertEventMessage);
+        } catch (Exception exception) {
+            log.error("Email notification failed", exception);
+        }
+    }
+
+    @Override
+    public boolean dispatchWithResult(AlertEventMessage alertEventMessage) {
         if (!notificationProperties.getEmail().isEnabled()) {
             log.info("Email notifications disabled");
-            return;
+            return false;
         }
 
         String recipient = notificationProperties.getEmail().getTo();
         if (isBlank(recipient)) {
             log.warn("Email notifications enabled but no recipient configured; skipping email");
-            return;
+            return false;
         }
 
         if (isBlank(mailProperties.getHost())) {
             log.warn("Email notifications enabled but SMTP host is missing; skipping email");
-            return;
+            return false;
         }
 
-        try {
-            log.info("Sending email notification to {}", recipient);
-            mailSender.send(buildMessage(alertEventMessage, recipient));
-            log.info("Email notification sent");
-        } catch (Exception exception) {
-            log.error("Email notification failed", exception);
-        }
+        log.info("Sending email notification to {}", recipient);
+        mailSender.send(buildMessage(alertEventMessage, recipient));
+        log.info("Email notification sent");
+        return true;
     }
 
     @Override

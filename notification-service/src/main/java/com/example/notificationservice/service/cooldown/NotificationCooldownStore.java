@@ -1,10 +1,11 @@
 package com.example.notificationservice.service.cooldown;
 
 import java.time.Instant;
+import java.time.Duration;
 
 public interface NotificationCooldownStore {
 
-    Instant getLastSentAt(String dedupeKey);
+    boolean tryAcquire(String dedupeKey, Instant sentAt, Duration cooldown);
 
-    void markSent(String dedupeKey, Instant sentAt);
+    void release(String dedupeKey);
 }
