@@ -26,20 +26,20 @@ public class MockAiProvider implements AiProvider {
         }
 
         List<String> recommendations = new ArrayList<>();
-        String likelyIssue = "System behavior is currently within expected operating bounds.";
+        String happening = "System behavior is currently within expected operating bounds.";
 
         if (activeAlertCount > 0) {
-            likelyIssue = "There are active alerts that suggest the system is under immediate pressure.";
+            happening = "There are active alerts that suggest the system needs attention.";
             recommendations.add("Review the active alerts first because they indicate the highest-priority issues.");
         } else if (anomalyCount > 0) {
-            likelyIssue = "Recent anomaly signals suggest system behavior has drifted from the normal baseline.";
+            happening = "Recent anomaly signals suggest this machine is behaving differently than usual.";
             recommendations.add("Compare the latest anomaly signals against the current telemetry trend to confirm whether the issue is still active.");
         } else if (cpuUsage > 85.0) {
-            likelyIssue = "CPU usage is elevated and compute-intensive work is likely affecting system responsiveness.";
+            happening = "CPU usage is elevated and a busy workload may be affecting responsiveness.";
         } else if (memoryUsage > 80.0) {
-            likelyIssue = "Memory usage is high and the machine may begin slowing down if pressure continues.";
+            happening = "Memory usage is high and the machine may slow down if it keeps rising.";
         } else if (diskUsage > 85.0) {
-            likelyIssue = "Disk usage is nearing capacity and storage headroom is becoming limited.";
+            happening = "Disk usage is getting high and free space is becoming limited.";
         }
 
         if (memoryUsage > 80.0) {
@@ -52,11 +52,11 @@ public class MockAiProvider implements AiProvider {
 
         if (topProcess != null && topProcess.getName() != null && !topProcess.getName().isBlank()) {
             if (topProcess.getCpu() != null && topProcess.getCpu() > 20.0) {
-                recommendations.add("Inspect process " + topProcess.getName() + " because it is one of the highest CPU consumers.");
+                recommendations.add(adviceOrDefault(topProcess, "Inspect this workload because it is one of the highest CPU consumers."));
             }
 
             if (topProcess.getMemory() != null && topProcess.getMemory() > 15.0) {
-                recommendations.add("Review process " + topProcess.getName() + " for memory growth or unnecessary background work.");
+                recommendations.add(adviceOrDefault(topProcess, "Review this workload for memory growth or unnecessary background work."));
             }
         }
 
@@ -64,29 +64,21 @@ public class MockAiProvider implements AiProvider {
             recommendations.add("Continue monitoring the system because no urgent action is required right now.");
         }
 
-        StringBuilder response = new StringBuilder();
-        response.append(likelyIssue);
-
+        String processMeaning = null;
         if (topProcess != null && topProcess.getName() != null && !topProcess.getName().isBlank()) {
-            response.append(" ")
-                    .append(topProcess.getName())
-                    .append(" is currently one of the most active processes");
-
-            if (topProcess.getCpu() != null) {
-                response.append(" at ").append(String.format("%.1f", topProcess.getCpu())).append("% CPU");
+            if (hasProcessInsight(topProcess)) {
+                processMeaning = topProcess.getHumanExplanation();
+            } else {
+                processMeaning = "The busiest process is currently using more resources than the others.";
             }
-
-            if (topProcess.getMemory() != null) {
-                response.append(" and ").append(String.format("%.1f", topProcess.getMemory())).append("% memory");
-            }
-
-            response.append(".");
         }
 
-        response.append(" Recommended actions: ")
-                .append(String.join(" ", recommendations));
-
-        return response.toString();
+        return formatStructuredResponse(
+                processMeaning != null ? processMeaning : happening,
+                whyThisHappens(topProcess),
+                seriousness(request, activeAlertCount, anomalyCount),
+                recommendations
+        );
     }
 
     private boolean hasFocusEvent(AiInsightRequest request) {
@@ -105,46 +97,46 @@ public class MockAiProvider implements AiProvider {
         String source = request.getFocusSource() != null ? request.getFocusSource() : "telemetry";
         double value = request.getFocusValue();
 
-        List<String> likelyCauses = new ArrayList<>();
+        String happening;
         List<String> actions = new ArrayList<>();
 
-        likelyCauses.add(metric + " spiked to " + String.format("%.1f", value) + "% at " + request.getFocusTimestamp()
-                + ", which can indicate short-term system pressure or a workload surge.");
-
         if (topProcess != null && topProcess.getName() != null && !topProcess.getName().isBlank()) {
-            likelyCauses.add(topProcess.getName() + " is one of the strongest contributing processes right now"
-                    + (topProcess.getCpu() != null ? " at " + String.format("%.1f", topProcess.getCpu()) + "% CPU" : "")
-                    + ".");
-            actions.add("Inspect process " + topProcess.getName() + " for runaway work, retries, or heavy resource usage.");
+            if (hasProcessInsight(topProcess)) {
+                happening = topProcess.getHumanExplanation();
+            } else {
+                happening = metric + " is elevated and the busiest workload is a likely contributor.";
+            }
+            actions.add(adviceOrDefault(topProcess, "Inspect the busiest workload for runaway work, heavy tabs or tools, retries, or sustained resource usage."));
+        } else {
+            happening = metric + " reached " + String.format("%.1f", value) + "% and the top contributor still needs to be confirmed.";
         }
 
         if (activeAlertCount > 0) {
-            likelyCauses.add("There are " + activeAlertCount + " active alerts, so this spike likely aligns with a broader health issue.");
             actions.add("Review the active alerts around this time window to confirm whether the spike triggered or worsened them.");
         }
 
-        if (anomalyCount > 0) {
-            likelyCauses.add("Recent anomaly detection also flagged unusual behavior, which suggests this was outside the normal baseline.");
-        }
-
         if ("MEMORY".equals(metric) || memoryUsageHigh(request)) {
-            actions.add("Close or restart heavy applications if memory pressure remains elevated.");
+            actions.add("Check top memory consumers, JVM or container memory pressure, and close or restart heavy applications if usage remains elevated.");
         }
 
         if ("DISK".equals(metric) || diskUsageHigh(request)) {
-            actions.add("Free disk space by removing stale logs, downloads, or unused large files.");
+            actions.add("Check log growth, Docker storage, database files, and remove stale artifacts carefully if free space stays low.");
         }
 
         if ("CPU".equals(metric)) {
-            actions.add("Check for runaway scripts, background jobs, or unexpected compute bursts.");
+            actions.add("Check for runaway scripts, browser tabs, builds, container work, or unexpected compute bursts.");
         }
 
         if (actions.isEmpty()) {
             actions.add("Monitor the next few telemetry points to see whether this spike was transient or sustained.");
         }
 
-        return "Focused event from " + source + ": " + String.join(" ", likelyCauses)
-                + " Recommended action: " + String.join(" ", actions);
+        return formatStructuredResponse(
+                "From " + source + ": " + happening,
+                whyThisHappens(topProcess),
+                seriousness(request, activeAlertCount, anomalyCount),
+                actions
+        );
     }
 
     private boolean memoryUsageHigh(AiInsightRequest request) {
@@ -162,16 +154,23 @@ public class MockAiProvider implements AiProvider {
         AiInsightRequest.TopProcessSummary topProcess = context.getTopProcess();
 
         if (normalizedMessage.contains("cpu")) {
-            return "CPU is likely elevated because current workload is consuming more compute than usual. "
-                    + (topProcess != null && topProcess.getName() != null && !topProcess.getName().isBlank()
-                    ? topProcess.getName() + " is one of the main CPU consumers right now. "
-                    : "")
-                    + "Start by inspecting the busiest process and any active alerts tied to CPU pressure.";
+            return formatStructuredResponse(
+                    "CPU is likely elevated because the current workload is using more compute than usual.",
+                    whyThisHappens(topProcess),
+                    seriousness(context, context.getActiveAlerts() != null ? context.getActiveAlerts().getCount() : 0,
+                            context.getAnomalies() != null ? context.getAnomalies().getCount() : 0),
+                    List.of("Check whether CPU is recovering or repeating.", "Inspect the busiest workload.", "Review any active CPU alerts.")
+            );
         }
 
         if (normalizedMessage.contains("memory")) {
-            return "Memory pressure usually comes from heavy applications or long-running background tasks. "
-                    + "Close unused apps, restart large processes, and watch whether memory drops over the next few telemetry updates.";
+            return formatStructuredResponse(
+                    "Memory pressure usually comes from heavy apps or long-running background work.",
+                    "This often happens when browser tabs, containers, IDEs, or services stay open for a while.",
+                    seriousness(context, context.getActiveAlerts() != null ? context.getActiveAlerts().getCount() : 0,
+                            context.getAnomalies() != null ? context.getAnomalies().getCount() : 0),
+                    List.of("Review the top memory consumers.", "Close unused apps.", "Watch whether memory drops over the next few telemetry updates.")
+            );
         }
 
         if (normalizedMessage.contains("fix first") || normalizedMessage.contains("first")) {
@@ -180,13 +179,82 @@ public class MockAiProvider implements AiProvider {
         }
 
         if (normalizedMessage.contains("anomaly")) {
-            return "The latest anomaly suggests behavior moved outside the normal baseline for that metric. "
-                    + (topProcess != null && topProcess.getName() != null && !topProcess.getName().isBlank()
-                    ? "A likely contributor is " + topProcess.getName() + ", which is currently a top resource consumer. "
-                    : "")
-                    + "Compare the anomaly timing with alerts and recent process activity to confirm the root cause.";
+            return formatStructuredResponse(
+                    "The latest anomaly suggests this machine moved outside its normal pattern.",
+                    whyThisHappens(topProcess),
+                    "This may be abnormal machine behavior, especially if it repeats or keeps rising.",
+                    List.of("Compare the anomaly timing with active alerts.", "Check recent process activity.", "Monitor the next few samples.")
+            );
         }
 
         return "Here is the current system summary: " + baseInsight;
+    }
+
+    private boolean hasProcessInsight(AiInsightRequest.TopProcessSummary process) {
+        return process != null
+                && process.getHumanExplanation() != null
+                && !process.getHumanExplanation().isBlank();
+    }
+
+    private String adviceOrDefault(AiInsightRequest.TopProcessSummary process, String fallback) {
+        if (process != null && process.getOperatorAdvice() != null && !process.getOperatorAdvice().isEmpty()) {
+            return process.getOperatorAdvice().get(0);
+        }
+        return fallback;
+    }
+
+    private String whyThisHappens(AiInsightRequest.TopProcessSummary process) {
+        if (process != null && process.getLikelyCauses() != null && !process.getLikelyCauses().isEmpty()) {
+            return "This usually happens when " + joinPlain(process.getLikelyCauses()) + ".";
+        }
+        return "This usually happens when local apps, builds, browser tabs, or background services are busy.";
+    }
+
+    private String seriousness(AiInsightRequest request, int activeAlertCount, int anomalyCount) {
+        if (request.getConfidenceLevel() != null && "CRITICAL".equalsIgnoreCase(request.getConfidenceLevel())) {
+            return "This looks critical and should be checked now.";
+        }
+        if (activeAlertCount > 0 || anomalyCount > 0) {
+            return "This may be abnormal machine behavior, so it is worth checking.";
+        }
+        if (request.getHistoricalPatternNotes() != null
+                && request.getHistoricalPatternNotes().toLowerCase().contains("recurring workload")) {
+            return "This workload appears normal for an active local development environment.";
+        }
+        return "The system does not currently appear overloaded.";
+    }
+
+    private String formatStructuredResponse(String happening, String why, String serious, List<String> actions) {
+        List<String> nextSteps = actions == null || actions.isEmpty()
+                ? List.of("Monitor the next few telemetry samples.")
+                : actions.stream().distinct().limit(4).toList();
+        return """
+                WHAT'S HAPPENING
+                %s
+
+                WHY THIS HAPPENS
+                %s
+
+                IS IT SERIOUS?
+                %s
+
+                WHAT TO DO NEXT
+                Recommended checks:
+                %s
+                """.formatted(happening, why, serious, joinBullets(nextSteps)).trim();
+    }
+
+    private String joinPlain(List<String> values) {
+        if (values.size() == 1) {
+            return values.get(0);
+        }
+        return String.join(", ", values.subList(0, values.size() - 1)) + ", or " + values.get(values.size() - 1);
+    }
+
+    private String joinBullets(List<String> values) {
+        return values.stream()
+                .map(value -> "- " + value)
+                .reduce((left, right) -> left + "\n" + right)
+                .orElse("- Monitor the next few telemetry samples.");
     }
 }

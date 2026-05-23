@@ -8,6 +8,7 @@ import com.example.monitoringapi.entity.HealthEvent;
 import com.example.monitoringapi.entity.Machine;
 import com.example.monitoringapi.kafka.HealthEventProducer;
 import com.example.monitoringapi.repository.HealthEventRepository;
+import io.micrometer.core.instrument.MeterRegistry;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -17,17 +18,21 @@ public class HealthEventIngestionService {
     private final HealthEventRepository healthEventRepository;
     private final MachineService machineService;
     private final HealthEventProducer healthEventProducer;
+    private final MeterRegistry meterRegistry;
 
     public HealthEventIngestionService(HealthEventRepository healthEventRepository,
                                        MachineService machineService,
-                                       HealthEventProducer healthEventProducer) {
+                                       HealthEventProducer healthEventProducer,
+                                       MeterRegistry meterRegistry) {
         this.healthEventRepository = healthEventRepository;
         this.machineService = machineService;
         this.healthEventProducer = healthEventProducer;
+        this.meterRegistry = meterRegistry;
     }
 
     @Transactional
     public HealthEventResponse ingestEvent(CreateHealthEventRequest request) {
+        meterRegistry.counter("labwatch.telemetry.events.received", "source", "health-event").increment();
         Machine machine = machineService.getOrCreateMachine(request);
 
         HealthEvent event = new HealthEvent();

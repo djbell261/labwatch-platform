@@ -14,12 +14,25 @@ import java.util.List;
 @AllArgsConstructor
 public class AiInsightRequest {
 
+    private String machineIdentifier;
     private Double cpuUsage;
     private Double memoryUsage;
     private Double diskUsage;
     private ActiveAlertsSummary activeAlerts;
     private AnomaliesSummary anomalies;
+    private String recentMetricTrend;
     private TopProcessSummary topProcess;
+    private TopProcessSummary topCpuProcess;
+    private TopProcessSummary topMemoryProcess;
+    private List<String> correlationTimeline;
+    private String incidentGroupKey;
+    private String incidentStatus;
+    private String suspectedContributor;
+    private String affectedMetrics;
+    private Integer confidenceScore;
+    private String confidenceLevel;
+    private String baselineSummary;
+    private String historicalPatternNotes;
     private LocalDateTime timestamp;
     private String focusTimestamp;
     private String focusMetric;
@@ -52,5 +65,10 @@ public class AiInsightRequest {
         private String name;
         private Double cpu;
         private Double memory;
+        private String category;
+        private String humanExplanation;
+        private List<String> likelyCauses;
+        private List<String> operatorAdvice;
+        private Boolean beginnerFriendly;
     }
 }

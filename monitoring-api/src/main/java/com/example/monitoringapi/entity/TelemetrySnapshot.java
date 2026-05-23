@@ -4,6 +4,8 @@ import jakarta.persistence.*;
 import lombok.AllArgsConstructor;
 import lombok.Data;
 import lombok.NoArgsConstructor;
+import org.hibernate.annotations.JdbcTypeCode;
+import org.hibernate.type.SqlTypes;
 
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
@@ -54,8 +56,8 @@ public class TelemetrySnapshot {
     @Column(nullable = false)
     private String source;
 
-    @Lob
-    @Column(name = "process_metrics_json")
+    @JdbcTypeCode(SqlTypes.VARCHAR)
+    @Column(name = "process_metrics_json", columnDefinition = "TEXT")
     private String processMetricsJson;
 
     @Column(name = "created_at", nullable = false)

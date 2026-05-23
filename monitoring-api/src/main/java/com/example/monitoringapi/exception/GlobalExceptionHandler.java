@@ -1,5 +1,7 @@
 package com.example.monitoringapi.exception;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.validation.FieldError;
@@ -13,6 +15,8 @@ import java.util.Map;
 
 @RestControllerAdvice
 public class GlobalExceptionHandler {
+
+    private static final Logger log = LoggerFactory.getLogger(GlobalExceptionHandler.class);
 
     @ExceptionHandler(ResourceNotFoundException.class)
     public ResponseEntity<Map<String, Object>> handleNotFound(ResourceNotFoundException exception) {
@@ -37,6 +41,7 @@ public class GlobalExceptionHandler {
 
     @ExceptionHandler(Exception.class)
     public ResponseEntity<Map<String, Object>> handleUnexpected(Exception exception) {
+        log.error("event=unexpected_error message={}", exception.getMessage(), exception);
         return buildResponse(HttpStatus.INTERNAL_SERVER_ERROR, "Unexpected server error");
     }
 

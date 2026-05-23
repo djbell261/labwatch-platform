@@ -1,4 +1,4 @@
-import { NavLink, Outlet } from "react-router-dom";
+import { NavLink, Outlet, useNavigate } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
 import { getInitials } from "../utils/operations";
 
@@ -11,7 +11,13 @@ const NAV_ITEMS = [
 ];
 
 function AppShell() {
+  const navigate = useNavigate();
   const { authEnabled, logout, user } = useAuth();
+
+  const handleLogout = () => {
+    logout();
+    navigate("/", { replace: true });
+  };
 
   return (
     <div className="dashboard-shell app-shell">
@@ -49,7 +55,7 @@ function AppShell() {
               </div>
             </div>
             {authEnabled && user ? (
-              <button type="button" className="ghost-button shell-logout" onClick={logout}>
+              <button type="button" className="ghost-button shell-logout" onClick={handleLogout}>
                 Logout
               </button>
             ) : null}

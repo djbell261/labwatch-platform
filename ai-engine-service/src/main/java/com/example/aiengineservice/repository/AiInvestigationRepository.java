@@ -11,5 +11,12 @@ public interface AiInvestigationRepository extends JpaRepository<AiInvestigation
 
     List<AiInvestigationEntity> findByMachineIdentifierOrderByCreatedAtDesc(String machineIdentifier);
 
+    List<AiInvestigationEntity> findTop20ByMachineIdentifierAndIncidentStatusInOrderByCreatedAtDesc(
+            String machineIdentifier,
+            List<String> incidentStatuses
+    );
+
     List<AiInvestigationEntity> findByAlertId(String alertId);
+
+    List<AiInvestigationEntity> findByIncidentIdOrderByCreatedAtDesc(String incidentId);
 }

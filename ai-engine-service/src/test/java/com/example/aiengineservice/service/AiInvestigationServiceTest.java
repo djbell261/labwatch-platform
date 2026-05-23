@@ -35,6 +35,8 @@ class AiInvestigationServiceTest {
     private StubAiProvider aiProvider;
     private StubAiInsightRequestBuilder aiInsightRequestBuilder;
     private StubAiInvestigationContextBuilder contextBuilder;
+    private StubAiSignalCorrelationService correlationService;
+    private AiInvestigationTriageComposer triageComposer;
     private AiInvestigationService aiInvestigationService;
 
     @BeforeEach
@@ -45,10 +47,14 @@ class AiInvestigationServiceTest {
         aiProvider = new StubAiProvider();
         aiInsightRequestBuilder = new StubAiInsightRequestBuilder();
         contextBuilder = new StubAiInvestigationContextBuilder();
+        correlationService = new StubAiSignalCorrelationService();
+        triageComposer = new AiInvestigationTriageComposer();
         aiInvestigationService = new AiInvestigationService(
                 aiProvider,
                 aiInsightRequestBuilder,
                 contextBuilder,
+                correlationService,
+                triageComposer,
                 producer,
                 repository,
                 Clock.fixed(Instant.parse("2026-05-05T14:00:00Z"), ZoneOffset.UTC)
@@ -103,8 +109,17 @@ class AiInvestigationServiceTest {
         assertEquals(1, producer.events.size());
         verify(repository).save(any(AiInvestigationEntity.class));
         AiInvestigationEvent event = producer.events.get(0);
-        assertEquals("LOW", event.getConfidence());
-        assertEquals("Insufficient AI context available to determine a precise root cause.", event.getLikelyCause());
+        assertEquals("HIGH", event.getConfidenceLevel());
+        org.junit.jupiter.api.Assertions.assertTrue(event.getConfidenceScore() >= 70);
+        assertEquals("a chrome browser tab or extension is consuming unusually high system resources.", event.getLikelyCause());
+        org.junit.jupiter.api.Assertions.assertTrue(event.getSummary().contains("WHAT'S HAPPENING"));
+        org.junit.jupiter.api.Assertions.assertTrue(event.getSummary().contains("IS IT SERIOUS?"));
+        assertEquals("ACTIVE", event.getIncidentStatus());
+        assertEquals("chrome", event.getSuspectedContributor());
+        assertEquals("Memory has dropped from 92.4% to 82.4%, so this appears more transient or already recovering.", event.getPersistenceAssessment());
+        org.junit.jupiter.api.Assertions.assertTrue(event.getRecommendedChecks().contains("top memory-consuming processes"));
+        org.junit.jupiter.api.Assertions.assertTrue(event.getBaselineSummary().contains("Recent baseline"));
+        org.junit.jupiter.api.Assertions.assertFalse(event.getCorrelationTimeline().isEmpty());
     }
 
     @Test
@@ -203,7 +218,7 @@ class AiInvestigationServiceTest {
     private static final class StubAiInvestigationContextBuilder extends AiInvestigationContextBuilder {
 
         private StubAiInvestigationContextBuilder() {
-            super(null, "http://localhost:8089", 1000, 1000);
+            super(null, "http://localhost:8089", "http://localhost:8088", 1000, 1000);
         }
 
         @Override
@@ -212,13 +227,20 @@ class AiInvestigationServiceTest {
             telemetry.setMachineIdentifier("derwins-macbook");
             telemetry.setHostname("Mac");
             telemetry.setTimestamp(LocalDateTime.of(2026, 5, 5, 13, 32));
-            telemetry.setMemoryUsage(92.4);
+            telemetry.setMemoryUsage(82.4);
 
             ProcessMetricResponse processMetric = new ProcessMetricResponse();
             processMetric.setProcessName("chrome");
             processMetric.setMemoryPercent(31.2);
             processMetric.setCpuPercent(11.0);
             telemetry.setProcessMetrics(List.of(processMetric));
+
+            TelemetrySnapshotDetailResponse olderTelemetry = new TelemetrySnapshotDetailResponse();
+            olderTelemetry.setMachineIdentifier("derwins-macbook");
+            olderTelemetry.setHostname("Mac");
+            olderTelemetry.setTimestamp(LocalDateTime.of(2026, 5, 5, 13, 20));
+            olderTelemetry.setMemoryUsage(84.0);
+            olderTelemetry.setProcessMetrics(List.of(processMetric));
 
             Anomaly anomaly = new Anomaly();
             anomaly.setAnomalyId(UUID.randomUUID());
@@ -227,11 +249,51 @@ class AiInvestigationServiceTest {
 
             return new AiInvestigationContext(
                     telemetry,
-                    List.of(telemetry),
+                    List.of(telemetry, olderTelemetry),
                     List.of(anomaly),
+                    List.of(),
                     "Recent MEMORY trend moved from 84.0% to 92.4% across 5 snapshots",
+                    processMetric,
+                    processMetric,
                     processMetric
             );
+        }
+    }
+
+    private static final class StubAiSignalCorrelationService extends AiSignalCorrelationService {
+
+        private StubAiSignalCorrelationService() {
+            super(new StubAnomalyQueryService(), "http://localhost:8089", "http://localhost:8088", 1000, 1000, 10, 5, 12);
+        }
+
+        @Override
+        public java.util.List<com.example.aiengineservice.dto.CorrelationTimelineEntry> buildTimeline(
+                AlertEventMessage alertEventMessage,
+                AiInvestigationContextBuilder.AiInvestigationContext context
+        ) {
+            return java.util.List.of(
+                    new com.example.aiengineservice.dto.CorrelationTimelineEntry(
+                            LocalDateTime.of(2026, 5, 5, 13, 31),
+                            "derwins-macbook",
+                            "PROCESS_SPIKE",
+                            "MEMORY",
+                            31.2,
+                            "chrome reached 31.2% memory",
+                            "processMetrics"
+                    )
+            );
+        }
+    }
+
+    private static final class StubAnomalyQueryService extends AnomalyQueryService {
+
+        private StubAnomalyQueryService() {
+            super(null);
+        }
+
+        @Override
+        public List<Anomaly> findByMachineIdentifier(String machineIdentifier) {
+            return List.of();
         }
     }
 }

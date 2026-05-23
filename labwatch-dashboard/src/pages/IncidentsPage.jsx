@@ -1,7 +1,7 @@
 import { useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useOperationsData } from "../hooks/useOperationsData";
-import { formatTimestamp, getSeverityTone, truncate } from "../utils/operations";
+import { formatDuration, formatTimestamp, getSeverityTone, groupInvestigationsByIncident, truncate } from "../utils/operations";
 
 const PAGE_SIZE = 10;
 
@@ -13,8 +13,13 @@ function IncidentsPage() {
   const [query, setQuery] = useState("");
   const [page, setPage] = useState(1);
 
+  const groupedIncidents = useMemo(
+    () => groupInvestigationsByIncident(recentInvestigations),
+    [recentInvestigations]
+  );
+
   const filteredIncidents = useMemo(() => {
-    return [...recentInvestigations]
+    return [...groupedIncidents]
       .sort((left, right) => new Date(right.createdAt || 0).getTime() - new Date(left.createdAt || 0).getTime())
       .filter((incident) => {
         const matchesSeverity =
@@ -23,6 +28,8 @@ function IncidentsPage() {
         const haystack = [
           incident?.machineIdentifier,
           incident?.alertType,
+          incident?.affectedMetrics,
+          incident?.suspectedContributor,
           incident?.summary,
           incident?.likelyCause,
         ]
@@ -31,7 +38,7 @@ function IncidentsPage() {
         const matchesQuery = !query.trim() || haystack.includes(query.trim().toLowerCase());
         return matchesSeverity && matchesMachine && matchesQuery;
       });
-  }, [machineFilter, query, recentInvestigations, severityFilter]);
+  }, [groupedIncidents, machineFilter, query, severityFilter]);
 
   const pagedIncidents = filteredIncidents.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
   const totalPages = Math.max(1, Math.ceil(filteredIncidents.length / PAGE_SIZE));
@@ -90,8 +97,11 @@ function IncidentsPage() {
                   <tr>
                     <th>Severity</th>
                     <th>Machine</th>
-                    <th>Alert Type</th>
+                    <th>Affected Metrics</th>
                     <th>Status</th>
+                    <th>Contributor</th>
+                    <th>Confidence</th>
+                    <th>Duration</th>
                     <th>Summary</th>
                     <th>Created</th>
                   </tr>
@@ -115,18 +125,23 @@ function IncidentsPage() {
                         </td>
                         <td>{incident.machineIdentifier || "Unknown machine"}</td>
                         <td>
-                          <div className="incident-table-type">{incident.alertType || "Unknown alert"}</div>
+                          <div className="incident-table-type">{incident.affectedMetrics || incident.alertType || "Unknown metric"}</div>
                         </td>
                         <td>
-                          <span className="status-pill red">
-                            <span className="status-dot red" />
-                            Open
+                          <span className={`status-pill ${incident.incidentStatus === "RESOLVED" ? "green" : "red"}`}>
+                            <span className={`status-dot ${incident.incidentStatus === "RESOLVED" ? "green" : "red"}`} />
+                            {incident.incidentStatus || "ACTIVE"}
                           </span>
                         </td>
+                        <td>{incident.suspectedContributor || "Unknown"}</td>
+                        <td>{incident.confidenceScore ? `${incident.confidenceScore}% ${incident.confidenceLevel || ""}` : incident.confidence}</td>
+                        <td>{formatDuration(incident.durationMs)}</td>
                         <td className="incident-summary-cell">
                           <div className="incident-summary-strong">{truncate(incident.summary, 92)}</div>
                           <div className="timestamp-copy">
-                            {truncate(incident.recommendedAction || incident.likelyCause || "Awaiting operator review.", 82)}
+                            {incident.relatedInvestigationCount > 0
+                              ? `${incident.relatedInvestigationCount + 1} related signals grouped`
+                              : truncate(incident.recommendedAction || incident.likelyCause || "Awaiting operator review.", 82)}
                           </div>
                         </td>
                         <td className="timestamp-nowrap">{formatTimestamp(incident.createdAt)}</td>

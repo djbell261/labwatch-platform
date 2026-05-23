@@ -1,7 +1,17 @@
 import { Client } from "@stomp/stompjs";
 import SockJS from "sockjs-client";
+import { monitoringApiBaseUrl } from "./api";
 
-const SOCKET_URL = "http://localhost:8089/ws";
+function buildSocketUrl() {
+  const configuredSocketUrl = String(import.meta.env.VITE_MONITORING_WS_URL || "").trim();
+  if (configuredSocketUrl) {
+    return configuredSocketUrl;
+  }
+
+  return new URL("/ws", `${monitoringApiBaseUrl.replace(/\/$/, "")}/`).toString();
+}
+
+const SOCKET_URL = buildSocketUrl();
 const TELEMETRY_TOPIC = "/topic/telemetry";
 
 export function createTelemetrySocket({ onTelemetry, onConnect, onDisconnect, onError }) {

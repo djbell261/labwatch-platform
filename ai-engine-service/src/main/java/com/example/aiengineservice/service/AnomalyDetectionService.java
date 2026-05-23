@@ -9,11 +9,16 @@ import com.example.aiengineservice.entity.Anomaly;
 import com.example.aiengineservice.kafka.AnomalyEventProducer;
 import com.example.aiengineservice.kafka.AnomalyPromotedAlertProducer;
 import com.example.aiengineservice.repository.AnomalyRepository;
+import com.example.aiengineservice.service.cooldown.PromotionCooldownStore;
+import io.micrometer.core.instrument.MeterRegistry;
+import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 
+import java.time.Instant;
 import java.time.Duration;
 import java.time.LocalDateTime;
 import java.util.ArrayDeque;
@@ -30,10 +35,11 @@ public class AnomalyDetectionService {
     private final Map<String, Deque<Double>> rollingWindows = new ConcurrentHashMap<>();
     private final Map<Long, LocalDateTime> machineFirstSeenAt = new ConcurrentHashMap<>();
     private final Map<String, Boolean> detectionActivated = new ConcurrentHashMap<>();
-    private final Map<String, LocalDateTime> lastPromotionAt = new ConcurrentHashMap<>();
     private final AnomalyRepository anomalyRepository;
     private final AnomalyEventProducer anomalyEventProducer;
     private final AnomalyPromotedAlertProducer anomalyPromotedAlertProducer;
+    private final PromotionCooldownStore promotionCooldownStore;
+    private final MeterRegistry meterRegistry;
     private final int rollingWindowSize;
     private final int minimumSampleSize;
     private final long minimumBaselineSeconds;
@@ -43,10 +49,13 @@ public class AnomalyDetectionService {
     private final boolean promotionEnabled;
     private final long promotionCooldownSeconds;
 
+    @Autowired
     public AnomalyDetectionService(
             AnomalyRepository anomalyRepository,
             AnomalyEventProducer anomalyEventProducer,
             AnomalyPromotedAlertProducer anomalyPromotedAlertProducer,
+            PromotionCooldownStore promotionCooldownStore,
+            MeterRegistry meterRegistry,
             @Value("${app.anomaly.window-size:10}") int rollingWindowSize,
             @Value("${labwatch.ai.anomaly.min-sample-size:20}") int minimumSampleSize,
             @Value("${labwatch.ai.anomaly.min-baseline-seconds:60}") long minimumBaselineSeconds,
@@ -59,6 +68,8 @@ public class AnomalyDetectionService {
         this.anomalyRepository = anomalyRepository;
         this.anomalyEventProducer = anomalyEventProducer;
         this.anomalyPromotedAlertProducer = anomalyPromotedAlertProducer;
+        this.promotionCooldownStore = promotionCooldownStore;
+        this.meterRegistry = meterRegistry;
         this.rollingWindowSize = rollingWindowSize;
         this.minimumSampleSize = minimumSampleSize;
         this.minimumBaselineSeconds = minimumBaselineSeconds;
@@ -67,6 +78,36 @@ public class AnomalyDetectionService {
         this.debugMode = debugMode;
         this.promotionEnabled = promotionEnabled;
         this.promotionCooldownSeconds = promotionCooldownSeconds;
+    }
+
+    AnomalyDetectionService(
+            AnomalyRepository anomalyRepository,
+            AnomalyEventProducer anomalyEventProducer,
+            AnomalyPromotedAlertProducer anomalyPromotedAlertProducer,
+            int rollingWindowSize,
+            int minimumSampleSize,
+            long minimumBaselineSeconds,
+            double zScoreThreshold,
+            long anomalyCooldownSeconds,
+            boolean debugMode,
+            boolean promotionEnabled,
+            long promotionCooldownSeconds
+    ) {
+        this(
+                anomalyRepository,
+                anomalyEventProducer,
+                anomalyPromotedAlertProducer,
+                new InMemoryPromotionCooldownStore(),
+                new SimpleMeterRegistry(),
+                rollingWindowSize,
+                minimumSampleSize,
+                minimumBaselineSeconds,
+                zScoreThreshold,
+                anomalyCooldownSeconds,
+                debugMode,
+                promotionEnabled,
+                promotionCooldownSeconds
+        );
     }
 
     public void processHealthEvent(HealthEventMessage eventMessage) {
@@ -145,6 +186,7 @@ public class AnomalyDetectionService {
                 round(resolveEffectiveZScoreThreshold())
         );
         anomalyRepository.save(anomaly);
+        meterRegistry.counter("labwatch.anomalies.detected", "eventType", eventType).increment();
         anomalyEventProducer.publish(toEventMessage(anomaly));
         promoteAnomalyIfNeeded(anomaly);
     }
@@ -332,20 +374,21 @@ public class AnomalyDetectionService {
                     anomaly.getEventType()
             );
             anomalyPromotedAlertProducer.publish(alertEventMessage);
-            lastPromotionAt.put(promotionKey, anomaly.getDetectedAt());
         } catch (Exception exception) {
+            promotionCooldownStore.release(promotionKey);
             log.error("Failed to publish promoted anomaly alert", exception);
         }
     }
 
     private boolean isPromotionCoolingDown(String promotionKey, LocalDateTime detectedAt) {
-        LocalDateTime previousPromotionAt = lastPromotionAt.get(promotionKey);
-        if (previousPromotionAt == null || detectedAt == null) {
-            return false;
-        }
-
-        long secondsSincePrevious = Math.max(0, Duration.between(previousPromotionAt, detectedAt).getSeconds());
-        return secondsSincePrevious < promotionCooldownSeconds;
+        Instant observedAt = detectedAt != null
+                ? detectedAt.atZone(java.time.ZoneOffset.UTC).toInstant()
+                : Instant.now();
+        return !promotionCooldownStore.tryAcquire(
+                promotionKey,
+                observedAt,
+                Duration.ofSeconds(promotionCooldownSeconds)
+        );
     }
 
     private String buildPromotionKey(Anomaly anomaly) {
@@ -434,5 +477,25 @@ public class AnomalyDetectionService {
 
     private String normalize(String value) {
         return value == null ? "" : value.trim().toUpperCase();
+    }
+
+    private static final class InMemoryPromotionCooldownStore implements PromotionCooldownStore {
+
+        private final Map<String, Instant> cooldowns = new ConcurrentHashMap<>();
+
+        @Override
+        public boolean tryAcquire(String key, Instant now, Duration cooldown) {
+            Instant expiresAt = cooldowns.get(key);
+            if (expiresAt != null && expiresAt.isAfter(now)) {
+                return false;
+            }
+
+            cooldowns.put(key, now.plus(cooldown));
+            return true;
+        }
+
+        @Override
+        public void release(String key) {
+        }
     }
 }

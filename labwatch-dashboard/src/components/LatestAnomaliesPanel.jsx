@@ -1,4 +1,6 @@
 import { normalizeAnomaly } from "./telemetryChartUtils";
+import EmptyState from "./states/EmptyState";
+import ErrorState from "./states/ErrorState";
 
 function formatAnomalyTime(value) {
   if (!value) {
@@ -45,15 +47,13 @@ function formatScore(value) {
 
 function AnomalySkeletonCard() {
   return (
-    <article className="anomaly-card is-loading" aria-hidden="true">
+    <article className="anomaly-card anomaly-card-compact is-loading" aria-hidden="true">
       <div className="incident-card-top">
         <span className="skeleton-line" style={{ width: "86px" }} />
         <span className="skeleton-line" style={{ width: "100px" }} />
       </div>
       <span className="skeleton-line" style={{ width: "48%" }} />
       <span className="skeleton-line" style={{ width: "78%", height: "14px" }} />
-      <span className="skeleton-line" style={{ width: "62%" }} />
-      <span className="skeleton-line" style={{ width: "90px" }} />
     </article>
   );
 }
@@ -63,6 +63,7 @@ function LatestAnomaliesPanel({
   loading = false,
   error = "",
   onInvestigate,
+  onViewAll,
   limit = 5,
 }) {
   const visibleAnomalies = anomalies
@@ -78,10 +79,9 @@ function LatestAnomaliesPanel({
           <div className="card-label">Latest Anomalies</div>
           <h2 className="section-title">Persistent Anomaly Timeline</h2>
         </div>
-        <div className="status-pill blue">
-          <span className="status-dot blue" />
-          {visibleAnomalies.length} visible
-        </div>
+        <button type="button" className="ghost-button" disabled={!onViewAll} onClick={() => onViewAll?.()}>
+          View all anomalies
+        </button>
       </div>
 
       {loading ? (
@@ -91,9 +91,9 @@ function LatestAnomaliesPanel({
           ))}
         </div>
       ) : error ? (
-        <div className="empty-state recent-incidents-empty">No anomalies detected yet — system may still be learning.</div>
+        <ErrorState message={error || "Unable to load anomalies"} />
       ) : visibleAnomalies.length === 0 ? (
-        <div className="empty-state recent-incidents-empty">No anomalies detected yet — system may still be learning.</div>
+        <EmptyState message="No anomalies detected yet — system may still be learning." />
       ) : (
         <div className="incidents-list">
           {visibleAnomalies.map((anomaly) => {
@@ -101,7 +101,7 @@ function LatestAnomaliesPanel({
             return (
               <article
                 key={anomaly.id || anomaly.anomalyId || `${anomaly.metricType}-${anomaly.detectedAt}`}
-                className="anomaly-card"
+                className="anomaly-card anomaly-card-compact"
               >
                 <div className="incident-card-top">
                   <span className={`status-pill ${severityTone}`}>
@@ -115,11 +115,11 @@ function LatestAnomaliesPanel({
                   <span className="incident-alert-type">{anomaly.metricType || "Unknown metric"}</span>
                   <span className="incident-created-at">{formatAnomalyTime(anomaly.detectedAt)}</span>
                 </div>
-                <p className="incident-summary">{truncate(anomaly.explanation, 160)}</p>
+                <p className="incident-summary incident-summary-compact">{truncate(anomaly.explanation, 120)}</p>
                 <div className="anomaly-card-footer">
                   <div className="anomaly-card-stats">
-                    <span>Value: {formatMetricValue(anomaly.metricValue)}</span>
-                    <span>Severity: {anomaly.severity || "UNKNOWN"}</span>
+                    <span>{formatMetricValue(anomaly.metricValue)}</span>
+                    <span>z {formatScore(anomaly.anomalyScore)}</span>
                   </div>
                   <button
                     type="button"

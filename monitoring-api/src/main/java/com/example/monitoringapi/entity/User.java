@@ -3,6 +3,8 @@ package com.example.monitoringapi.entity;
 import com.fasterxml.jackson.annotation.JsonIgnore;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
+import jakarta.persistence.EnumType;
+import jakarta.persistence.Enumerated;
 import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
@@ -42,6 +44,10 @@ public class User {
     @Column(name = "display_name", nullable = false)
     private String displayName;
 
+    @Enumerated(EnumType.STRING)
+    @Column(nullable = false)
+    private UserRole role;
+
     // TODO: Introduce organizations/workspaces later so machines can belong to shared accounts.
     @JsonIgnore
     @OneToMany(mappedBy = "owner")
@@ -57,6 +63,9 @@ public class User {
         }
         if (userId == null || userId.isBlank()) {
             userId = UUID.randomUUID().toString();
+        }
+        if (role == null) {
+            role = UserRole.OPERATOR;
         }
     }
 }

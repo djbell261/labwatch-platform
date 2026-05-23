@@ -6,5 +6,10 @@ public interface NotificationChannel {
 
     void dispatch(AlertEventMessage alertEventMessage);
 
+    default boolean dispatchWithResult(AlertEventMessage alertEventMessage) {
+        dispatch(alertEventMessage);
+        return true;
+    }
+
     String channelName();
 }

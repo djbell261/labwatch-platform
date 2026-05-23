@@ -16,6 +16,12 @@ public class KafkaTopicConfig {
     @Value("${app.kafka.topic.ai-investigation-events}")
     private String aiInvestigationEventsTopicName;
 
+    @Value("${app.kafka.topic.health-events-dlt:health-events.ai-engine.dlt}")
+    private String healthEventsDltTopicName;
+
+    @Value("${app.kafka.topic.alert-events-dlt:alert-events.ai-engine.dlt}")
+    private String alertEventsDltTopicName;
+
     @Bean
     @ConditionalOnProperty(
             name = "app.kafka.topic.auto-create-enabled",
@@ -37,6 +43,32 @@ public class KafkaTopicConfig {
     )
     public NewTopic aiInvestigationEventsTopic() {
         return TopicBuilder.name(aiInvestigationEventsTopicName)
+                .partitions(3)
+                .replicas(1)
+                .build();
+    }
+
+    @Bean
+    @ConditionalOnProperty(
+            name = "app.kafka.topic.auto-create-enabled",
+            havingValue = "true",
+            matchIfMissing = true
+    )
+    public NewTopic healthEventsDltTopic() {
+        return TopicBuilder.name(healthEventsDltTopicName)
+                .partitions(3)
+                .replicas(1)
+                .build();
+    }
+
+    @Bean
+    @ConditionalOnProperty(
+            name = "app.kafka.topic.auto-create-enabled",
+            havingValue = "true",
+            matchIfMissing = true
+    )
+    public NewTopic alertEventsDltTopic() {
+        return TopicBuilder.name(alertEventsDltTopicName)
                 .partitions(3)
                 .replicas(1)
                 .build();

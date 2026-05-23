@@ -17,6 +17,7 @@ import com.example.monitoringapi.security.CurrentUserService;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import io.micrometer.core.instrument.MeterRegistry;
 import org.springframework.messaging.simp.SimpMessagingTemplate;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Sort;
@@ -44,6 +45,7 @@ public class TelemetrySnapshotIngestionService {
     private final ObjectMapper objectMapper;
     private final SimpMessagingTemplate messagingTemplate;
     private final CurrentUserService currentUserService;
+    private final MeterRegistry meterRegistry;
 
     public TelemetrySnapshotIngestionService(
             MachineService machineService,
@@ -53,7 +55,8 @@ public class TelemetrySnapshotIngestionService {
             HealthEventProducer healthEventProducer,
             ObjectMapper objectMapper,
             SimpMessagingTemplate messagingTemplate,
-            CurrentUserService currentUserService
+            CurrentUserService currentUserService,
+            MeterRegistry meterRegistry
     ) {
         this.machineService = machineService;
         this.agentService = agentService;
@@ -63,11 +66,13 @@ public class TelemetrySnapshotIngestionService {
         this.objectMapper = objectMapper;
         this.messagingTemplate = messagingTemplate;
         this.currentUserService = currentUserService;
+        this.meterRegistry = meterRegistry;
     }
 
     @Transactional
     public TelemetrySnapshotResponse ingestSnapshot(TelemetrySnapshotRequest request, String agentToken) {
         agentService.validateTelemetryAccess(request.getMachineIdentifier(), agentToken);
+        meterRegistry.counter("labwatch.telemetry.events.received", "source", "snapshot").increment();
         Machine machine = machineService.getOrCreateMachine(request);
 
         TelemetrySnapshot snapshot = new TelemetrySnapshot();

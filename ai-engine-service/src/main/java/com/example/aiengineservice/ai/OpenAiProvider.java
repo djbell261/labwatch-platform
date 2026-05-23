@@ -4,6 +4,7 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
 import org.springframework.stereotype.Component;
+import org.springframework.http.client.SimpleClientHttpRequestFactory;
 import org.springframework.web.client.RestClient;
 
 import java.util.List;
@@ -19,13 +20,18 @@ public class OpenAiProvider implements AiProvider {
     public OpenAiProvider(
             @Value("${OPENAI_API_KEY:}") String apiKey,
             @Value("${ai.openai.model:gpt-4o-mini}") String model,
-            @Value("${ai.openai.base-url:https://api.openai.com}") String baseUrl
+            @Value("${ai.openai.base-url:https://api.openai.com}") String baseUrl,
+            @Value("${app.ai-investigation.timeout-ms:15000}") int timeoutMs
     ) {
         this.apiKey = apiKey;
         this.model = model;
+        SimpleClientHttpRequestFactory requestFactory = new SimpleClientHttpRequestFactory();
+        requestFactory.setConnectTimeout(timeoutMs);
+        requestFactory.setReadTimeout(timeoutMs);
         this.restClient = RestClient.builder()
                 .baseUrl(baseUrl)
                 .defaultHeader(HttpHeaders.CONTENT_TYPE, MediaType.APPLICATION_JSON_VALUE)
+                .requestFactory(requestFactory)
                 .build();
     }
 
@@ -41,7 +47,7 @@ public class OpenAiProvider implements AiProvider {
                 "model", model,
                 "messages", List.of(
                         Map.of("role", "system", "content",
-                                "You are a system monitoring assistant. Analyze telemetry, summarize the likely issue, and recommend actions in 2 to 4 concise sentences."),
+                                "You are an intelligent operations assistant. Use short, calm, beginner-friendly language. Avoid dense monitoring-report wording and avoid raw process names when a plain explanation is available."),
                         Map.of("role", "user", "content", prompt)
                 ),
                 "temperature", 0.2
@@ -92,7 +98,7 @@ public class OpenAiProvider implements AiProvider {
                 "model", model,
                 "messages", List.of(
                         Map.of("role", "system", "content",
-                                "You are a system monitoring assistant. Answer operational questions about telemetry, alerts, anomalies, and likely root causes. Keep answers practical and under 5 sentences."),
+                                "You are an intelligent operations assistant. Answer in short, calm, beginner-friendly sections with practical next steps."),
                         Map.of("role", "user", "content", buildChatPrompt(userMessage, context))
                 ),
                 "temperature", 0.2
@@ -142,13 +148,38 @@ public class OpenAiProvider implements AiProvider {
                 && request.getFocusValue() != null;
 
         return """
-                Analyze the following system telemetry and return a short explanation and recommended actions.%s
+                Analyze the following system telemetry and return exactly four lightweight sections:
+                WHAT'S HAPPENING
+                WHY THIS HAPPENS
+                IS IT SERIOUS?
+                WHAT TO DO NEXT
+
+                Keep each section to 1 short sentence except WHAT TO DO NEXT, which should use 2 to 4 bullets.
+                Prefer plain-English process meaning over raw process names.
+                Distinguish normal developer workload from abnormal machine behavior.
+                Suppress numeric detail unless severity, confidence, or trend suggests a warning.
+                %s
                 CPU Usage: %s
                 Memory Usage: %s
                 Disk Usage: %s
+                Machine Identifier: %s
                 Active Alerts: count=%s, types=%s
                 Anomalies: count=%s, severity=%s
+                Recent Metric Trend: %s
                 Top Process: name=%s, cpu=%s, memory=%s
+                Top Process Interpretation: %s
+                Top CPU Process: name=%s, cpu=%s, memory=%s
+                Top CPU Process Interpretation: %s
+                Top Memory Process: name=%s, cpu=%s, memory=%s
+                Top Memory Process Interpretation: %s
+                Correlation Timeline: %s
+                Incident Group Key: %s
+                Incident Status: %s
+                Suspected Contributor: %s
+                Affected Metrics: %s
+                Confidence: %s (%s%%)
+                Machine Baseline: %s
+                Historical Pattern Notes: %s
                 Timestamp: %s
                 Focus Event Timestamp: %s
                 Focus Event Metric: %s
@@ -156,18 +187,38 @@ public class OpenAiProvider implements AiProvider {
                 Focus Event Source: %s
                 """.formatted(
                 focusedEvent
-                        ? " Focus on the selected event and explain the most likely root cause in practical terms, keeping the answer under 5 sentences."
-                        : "",
+                        ? "Focus on the selected event and keep the wording calm and actionable."
+                        : "Summarize the most important issue, likely contributor, seriousness, and next steps.",
                 request.getCpuUsage(),
                 request.getMemoryUsage(),
                 request.getDiskUsage(),
+                request.getMachineIdentifier(),
                 activeAlerts != null ? activeAlerts.getCount() : 0,
                 activeAlerts != null ? activeAlerts.getTypes() : List.of(),
                 anomalies != null ? anomalies.getCount() : 0,
                 anomalies != null ? anomalies.getSeverity() : List.of(),
+                request.getRecentMetricTrend(),
                 topProcess != null ? topProcess.getName() : "unknown",
                 topProcess != null ? topProcess.getCpu() : null,
                 topProcess != null ? topProcess.getMemory() : null,
+                formatProcessInsight(topProcess),
+                request.getTopCpuProcess() != null ? request.getTopCpuProcess().getName() : "unknown",
+                request.getTopCpuProcess() != null ? request.getTopCpuProcess().getCpu() : null,
+                request.getTopCpuProcess() != null ? request.getTopCpuProcess().getMemory() : null,
+                formatProcessInsight(request.getTopCpuProcess()),
+                request.getTopMemoryProcess() != null ? request.getTopMemoryProcess().getName() : "unknown",
+                request.getTopMemoryProcess() != null ? request.getTopMemoryProcess().getCpu() : null,
+                request.getTopMemoryProcess() != null ? request.getTopMemoryProcess().getMemory() : null,
+                formatProcessInsight(request.getTopMemoryProcess()),
+                request.getCorrelationTimeline() != null ? request.getCorrelationTimeline() : List.of(),
+                request.getIncidentGroupKey(),
+                request.getIncidentStatus(),
+                request.getSuspectedContributor(),
+                request.getAffectedMetrics(),
+                request.getConfidenceLevel(),
+                request.getConfidenceScore(),
+                request.getBaselineSummary(),
+                request.getHistoricalPatternNotes(),
                 request.getTimestamp(),
                 request.getFocusTimestamp(),
                 request.getFocusMetric(),
@@ -187,24 +238,79 @@ public class OpenAiProvider implements AiProvider {
                 CPU Usage: %s
                 Memory Usage: %s
                 Disk Usage: %s
+                Machine Identifier: %s
                 Active Alerts: count=%s, types=%s
                 Anomalies: count=%s, severity=%s
+                Recent Metric Trend: %s
                 Top Process: name=%s, cpu=%s, memory=%s
+                Top Process Interpretation: %s
+                Top CPU Process: name=%s, cpu=%s, memory=%s
+                Top CPU Process Interpretation: %s
+                Top Memory Process: name=%s, cpu=%s, memory=%s
+                Top Memory Process Interpretation: %s
+                Correlation Timeline: %s
+                Incident Group Key: %s
+                Incident Status: %s
+                Suspected Contributor: %s
+                Affected Metrics: %s
+                Confidence: %s (%s%%)
+                Machine Baseline: %s
+                Historical Pattern Notes: %s
                 Timestamp: %s
-                Respond with a concise monitoring-focused answer and practical next steps.
+                Respond using exactly four lightweight sections:
+                WHAT'S HAPPENING
+                WHY THIS HAPPENS
+                IS IT SERIOUS?
+                WHAT TO DO NEXT
+
+                Keep it short, conversational, and beginner-friendly. Use bullets only in WHAT TO DO NEXT. Prefer plain-English process meaning over raw process names, and clearly say whether this looks like normal developer workload or abnormal machine behavior.
                 """.formatted(
                 userMessage,
                 request.getCpuUsage(),
                 request.getMemoryUsage(),
                 request.getDiskUsage(),
+                request.getMachineIdentifier(),
                 activeAlerts != null ? activeAlerts.getCount() : 0,
                 activeAlerts != null ? activeAlerts.getTypes() : List.of(),
                 anomalies != null ? anomalies.getCount() : 0,
                 anomalies != null ? anomalies.getSeverity() : List.of(),
+                request.getRecentMetricTrend(),
                 topProcess != null ? topProcess.getName() : "unknown",
                 topProcess != null ? topProcess.getCpu() : null,
                 topProcess != null ? topProcess.getMemory() : null,
+                formatProcessInsight(topProcess),
+                request.getTopCpuProcess() != null ? request.getTopCpuProcess().getName() : "unknown",
+                request.getTopCpuProcess() != null ? request.getTopCpuProcess().getCpu() : null,
+                request.getTopCpuProcess() != null ? request.getTopCpuProcess().getMemory() : null,
+                formatProcessInsight(request.getTopCpuProcess()),
+                request.getTopMemoryProcess() != null ? request.getTopMemoryProcess().getName() : "unknown",
+                request.getTopMemoryProcess() != null ? request.getTopMemoryProcess().getCpu() : null,
+                request.getTopMemoryProcess() != null ? request.getTopMemoryProcess().getMemory() : null,
+                formatProcessInsight(request.getTopMemoryProcess()),
+                request.getCorrelationTimeline() != null ? request.getCorrelationTimeline() : List.of(),
+                request.getIncidentGroupKey(),
+                request.getIncidentStatus(),
+                request.getSuspectedContributor(),
+                request.getAffectedMetrics(),
+                request.getConfidenceLevel(),
+                request.getConfidenceScore(),
+                request.getBaselineSummary(),
+                request.getHistoricalPatternNotes(),
                 request.getTimestamp()
         );
+    }
+
+    private String formatProcessInsight(AiInsightRequest.TopProcessSummary process) {
+        if (process == null || process.getHumanExplanation() == null || process.getHumanExplanation().isBlank()) {
+            return "No known plain-English mapping; use the raw process name only as supporting evidence.";
+        }
+        return "category=" + process.getCategory()
+                + "; meaning=" + process.getHumanExplanation()
+                + "; likely causes=" + safeList(process.getLikelyCauses())
+                + "; recommended checks=" + safeList(process.getOperatorAdvice());
+    }
+
+    private List<String> safeList(List<String> values) {
+        return values != null ? values : List.of();
     }
 }
