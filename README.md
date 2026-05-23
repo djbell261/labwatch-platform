@@ -112,6 +112,12 @@ docker compose up --build -d
 ./scripts/seed-demo-telemetry.sh
 ```
 
+## Runtime Profiles
+
+- Profile guide: [docs/ENVIRONMENT_PROFILES.md](/Users/derwinbell/dev/ResumeProjects/labwatch-platform/docs/ENVIRONMENT_PROFILES.md)
+- Local/demo Compose startup defaults to `LABWATCH_SPRING_PROFILE=demo`
+- Persistent-schema services now use Flyway migrations with `ddl-auto=validate`
+
 ## Services
 
 | Service        | URL                                            |
@@ -232,7 +238,10 @@ Requires `Authorization: Bearer <jwt>`.
 
 ## Migration Notes
 
-- No manual SQL migration is required in the current dev setup because JPA is still using schema update/create-drop behavior.
+- `monitoring-api`, `alert-engine`, and `ai-engine-service` now use Flyway migrations.
+- Each service keeps a dedicated Flyway history table because the platform shares one PostgreSQL database.
+- Existing databases can transition safely with `baseline-on-migrate=true`.
+- Fresh environments are created from versioned SQL migration files instead of `ddl-auto=update`.
 - Existing `machine` rows remain valid because ownership is nullable.
 - Existing machines will show as unowned until a logged-in user claims them.
 

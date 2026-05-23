@@ -1,4 +1,7 @@
 import { useNavigate } from "react-router-dom";
+import EmptyState from "../components/states/EmptyState";
+import ErrorState from "../components/states/ErrorState";
+import LoadingState from "../components/states/LoadingState";
 import { useAuth } from "../context/AuthContext";
 import { useOperationsData } from "../hooks/useOperationsData";
 import { formatRelativeLastSeen, resolveMachineStatus, resolveOwnership } from "../utils/operations";
@@ -11,6 +14,8 @@ function MachinesPage() {
     claimError,
     claimSelectedMachine,
     machines,
+    machinesError,
+    machinesLoading,
     recentInvestigations,
     alerts,
     anomalies,
@@ -34,8 +39,15 @@ function MachinesPage() {
         </div>
       ) : null}
 
-      <div className="machine-grid">
-        {machines.map((machine) => {
+      {machinesLoading && machines.length === 0 && availableMachines.length === 0 ? (
+        <LoadingState message="Loading machines..." />
+      ) : machinesError ? (
+        <ErrorState message={machinesError} />
+      ) : machines.length === 0 && availableMachines.length === 0 ? (
+        <EmptyState message="No machines reporting yet." />
+      ) : (
+        <div className="machine-grid">
+          {machines.map((machine) => {
           const status = resolveMachineStatus(machine);
           const ownership = resolveOwnership(machine, user?.userId);
           const machineAlerts = alerts.filter((alert) => alert.machineIdentifier === machine.machineIdentifier);
@@ -81,31 +93,32 @@ function MachinesPage() {
               </div>
             </button>
           );
-        })}
+          })}
 
-        {availableMachines.map((machine) => (
-          <div key={`claim-${machine.machineIdentifier}`} className="machine-card">
-            <div className="machine-card-top">
-              <div>
-                <div className="machine-card-name">{machine.hostname || machine.machineIdentifier}</div>
-                <div className="machine-card-identifier">{machine.machineIdentifier}</div>
+          {availableMachines.map((machine) => (
+            <div key={`claim-${machine.machineIdentifier}`} className="machine-card">
+              <div className="machine-card-top">
+                <div>
+                  <div className="machine-card-name">{machine.hostname || machine.machineIdentifier}</div>
+                  <div className="machine-card-identifier">{machine.machineIdentifier}</div>
+                </div>
+                <span className="status-pill blue">
+                  <span className="status-dot blue" />
+                  Claimable
+                </span>
               </div>
-              <span className="status-pill blue">
-                <span className="status-dot blue" />
-                Claimable
-              </span>
+              <div className="machine-card-subtle">Available to add to your monitoring workspace.</div>
+              <button
+                type="button"
+                className="action-button"
+                onClick={() => claimSelectedMachine(machine.machineIdentifier)}
+              >
+                Claim machine
+              </button>
             </div>
-            <div className="machine-card-subtle">Available to add to your monitoring workspace.</div>
-            <button
-              type="button"
-              className="action-button"
-              onClick={() => claimSelectedMachine(machine.machineIdentifier)}
-            >
-              Claim machine
-            </button>
-          </div>
-        ))}
-      </div>
+          ))}
+        </div>
+      )}
     </div>
   );
 }

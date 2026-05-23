@@ -4,9 +4,11 @@ import {
   getAlerts,
   getAnomalies,
   getInvestigationsByAlertId,
+  getInvestigationsByIncidentId,
   getRecentInvestigations,
   sendChatMessage,
 } from "../services/api";
+import { formatDuration } from "../utils/operations";
 
 function formatTimestamp(value) {
   if (!value) {
@@ -47,6 +49,68 @@ function TimelineItem({ label, title, meta, tone = "blue" }) {
   );
 }
 
+function parseSectionLines(value) {
+  if (!value) {
+    return [];
+  }
+
+  return String(value)
+    .split("\n")
+    .map((line) => line.replace(/^\s*-\s*/, "").trim())
+    .filter(Boolean);
+}
+
+function InvestigationSection({ label, value, asList = false }) {
+  const lines = parseSectionLines(value);
+
+  if (asList) {
+    return (
+      <div>
+        <div className="detail-label">{label}</div>
+        {lines.length > 0 ? (
+          <ul className="incident-detail-list">
+            {lines.map((line) => (
+              <li key={`${label}-${line}`}>{line}</li>
+            ))}
+          </ul>
+        ) : (
+          <p className="incident-detail-paragraph">No details available.</p>
+        )}
+      </div>
+    );
+  }
+
+  return (
+    <div>
+      <div className="detail-label">{label}</div>
+      <p className="incident-detail-paragraph">{value || "No details available."}</p>
+    </div>
+  );
+}
+
+function formatTimelineTime(value) {
+  if (!value) {
+    return "Unknown time";
+  }
+
+  const parsed = new Date(value);
+  if (Number.isNaN(parsed.getTime())) {
+    return value;
+  }
+
+  return parsed.toLocaleTimeString([], {
+    hour: "2-digit",
+    minute: "2-digit",
+  });
+}
+
+function formatTimelineType(type) {
+  return String(type || "UNKNOWN")
+    .replace(/_/g, " ")
+    .toLowerCase()
+    .replace(/\b\w/g, (match) => match.toUpperCase());
+}
+
 function IncidentDetailPage({ investigationId, initialIncident = null, onBack }) {
   const [incident, setIncident] = useState(
     initialIncident?.investigationId === investigationId ? initialIncident : null
@@ -84,11 +148,13 @@ function IncidentDetailPage({ investigationId, initialIncident = null, onBack })
 
         const [
           alertInvestigations,
+          incidentInvestigations,
           machineInvestigations,
           machineAlerts,
           machineAnomalies,
         ] = await Promise.all([
           getInvestigationsByAlertId(baseIncident.alertId),
+          getInvestigationsByIncidentId(baseIncident.incidentId || baseIncident.investigationId),
           getRecentInvestigations(baseIncident.machineIdentifier),
           getAlerts(baseIncident.machineIdentifier),
           getAnomalies(baseIncident.machineIdentifier),
@@ -99,13 +165,15 @@ function IncidentDetailPage({ investigationId, initialIncident = null, onBack })
         }
 
         const resolvedIncident =
+          incidentInvestigations.find((item) => item.investigationId === investigationId) ||
           alertInvestigations.find((item) => item.investigationId === investigationId) ||
+          incidentInvestigations[0] ||
           alertInvestigations[0] ||
           baseIncident;
 
         setIncident(resolvedIncident);
         setRelatedInvestigations(
-          machineInvestigations
+          (incidentInvestigations.length ? incidentInvestigations : machineInvestigations)
             .filter((item) => item.investigationId !== resolvedIncident.investigationId)
             .slice(0, 5)
         );
@@ -116,12 +184,22 @@ function IncidentDetailPage({ investigationId, initialIncident = null, onBack })
           message: [
             "Investigate this incident with the full stored context:",
             `Machine: ${resolvedIncident.machineIdentifier || "unknown"}`,
+            `Incident ID: ${resolvedIncident.incidentId || "unknown"}`,
+            `Incident Status: ${resolvedIncident.incidentStatus || "unknown"}`,
+            `Affected Metrics: ${resolvedIncident.affectedMetrics || "unknown"}`,
+            `Suspected Contributor: ${resolvedIncident.suspectedContributor || "unknown"}`,
             `Alert Type: ${resolvedIncident.alertType || "unknown"}`,
             `Severity: ${resolvedIncident.severity || "unknown"}`,
             `Summary: ${resolvedIncident.summary || "No summary available."}`,
             `Likely Cause: ${resolvedIncident.likelyCause || "Unknown"}`,
-            `Recommended Action: ${resolvedIncident.recommendedAction || "Unknown"}`,
-            `Confidence: ${resolvedIncident.confidence || "unknown"}`,
+            `Evidence: ${resolvedIncident.evidence || "Unknown"}`,
+            `Recommended Checks: ${resolvedIncident.recommendedChecks || "Unknown"}`,
+            `Recommended Actions: ${resolvedIncident.recommendedAction || "Unknown"}`,
+            `Persistence Assessment: ${resolvedIncident.persistenceAssessment || "Unknown"}`,
+            `Machine Baseline: ${resolvedIncident.baselineSummary || "Unknown"}`,
+            `Historical Pattern Notes: ${resolvedIncident.historicalPatternNotes || "Unknown"}`,
+            `Correlation Timeline: ${resolvedIncident.correlationTimeline?.map((entry) => `${formatTimelineTime(entry.timestamp)} ${entry.type}: ${entry.description}`).join(" | ") || "Unknown"}`,
+            `Confidence: ${resolvedIncident.confidenceScore ? `${resolvedIncident.confidenceScore}% ${resolvedIncident.confidenceLevel || ""}` : resolvedIncident.confidence || "unknown"}`,
             "Provide a concise operator-ready triage plan and what to verify next.",
           ].join("\n"),
         });
@@ -160,11 +238,14 @@ function IncidentDetailPage({ investigationId, initialIncident = null, onBack })
 
     return [
       ["Investigation ID", incident.investigationId],
+      ["Incident ID", incident.incidentId],
+      ["Incident Status", incident.incidentStatus],
       ["Alert ID", incident.alertId],
       ["Machine", incident.machineIdentifier],
-      ["Alert Type", incident.alertType],
+      ["Affected Metrics", incident.affectedMetrics || incident.alertType],
+      ["Suspected Contributor", incident.suspectedContributor],
       ["Severity", incident.severity],
-      ["Confidence", incident.confidence],
+      ["Confidence", incident.confidenceScore ? `${incident.confidenceScore}% ${incident.confidenceLevel || ""}` : incident.confidence],
       ["Created At", formatTimestamp(incident.createdAt)],
     ];
   }, [incident]);
@@ -181,7 +262,9 @@ function IncidentDetailPage({ investigationId, initialIncident = null, onBack })
             <span className={`status-dot ${getSeverityTone(incident.severity)}`} />
             {incident.severity || "UNKNOWN"}
           </span>
-          <span className="machine-card-subtle">{incident.confidence || "UNKNOWN"} confidence</span>
+          <span className="machine-card-subtle">
+            {incident.confidenceScore ? `${incident.confidenceScore}% ${incident.confidenceLevel || ""}` : incident.confidence || "UNKNOWN"} confidence
+          </span>
         </div>
         <div className="incident-context-title">
           {incident.machineIdentifier || "Unknown machine"} · {incident.alertType || "Unknown alert"}
@@ -194,7 +277,7 @@ function IncidentDetailPage({ investigationId, initialIncident = null, onBack })
       <div className="context-grid">
         <div className="context-row">
           <span className="context-label">Likely Cause</span>
-          <span className="context-value">{incident.likelyCause || "Unknown"}</span>
+          <span className="context-value">{incident.suspectedContributor || incident.likelyCause || "Unknown"}</span>
         </div>
         <div className="context-row">
           <span className="context-label">Created At</span>
@@ -270,7 +353,17 @@ function IncidentDetailPage({ investigationId, initialIncident = null, onBack })
                 </div>
                 <div className="detail-stat">
                   <div className="detail-label">Confidence</div>
-                  <div className="detail-value">{incident.confidence || "Unknown"}</div>
+                  <div className="detail-value">
+                    {incident.confidenceScore ? `${incident.confidenceScore}% ${incident.confidenceLevel || ""}` : incident.confidence || "Unknown"}
+                  </div>
+                </div>
+                <div className="detail-stat">
+                  <div className="detail-label">Status</div>
+                  <div className="detail-value">{incident.incidentStatus || "ACTIVE"}</div>
+                </div>
+                <div className="detail-stat">
+                  <div className="detail-label">Duration</div>
+                  <div className="detail-value">{formatDuration(initialIncident?.durationMs || 0)}</div>
                 </div>
                 <div className="detail-stat">
                   <div className="detail-label">Timestamp</div>
@@ -279,19 +372,50 @@ function IncidentDetailPage({ investigationId, initialIncident = null, onBack })
               </div>
 
               <div className="incident-detail-copy">
-                <div>
-                  <div className="detail-label">Summary</div>
-                  <p className="incident-detail-paragraph">{incident.summary || "No summary available."}</p>
-                </div>
-                <div>
-                  <div className="detail-label">Likely Cause</div>
-                  <p className="incident-detail-paragraph">{incident.likelyCause || "Unknown"}</p>
-                </div>
-                <div>
-                  <div className="detail-label">Recommended Action</div>
-                  <p className="incident-detail-paragraph">{incident.recommendedAction || "Unknown"}</p>
-                </div>
+                <InvestigationSection label="Summary" value={incident.summary} />
+                <InvestigationSection label="Suspected Contributor" value={incident.suspectedContributor || incident.likelyCause} />
+                <InvestigationSection label="Likely Cause" value={incident.likelyCause} />
+                <InvestigationSection label="Evidence" value={incident.evidence} asList />
+                <InvestigationSection label="Confidence Reasoning" value={incident.confidenceReasoning} asList />
+                <InvestigationSection label="Possible Contributing Factors" value={incident.contributingFactors} asList />
+                <InvestigationSection label="Historical Pattern Notes" value={incident.historicalPatternNotes} />
+                <InvestigationSection label="Machine Baseline" value={incident.baselineSummary} />
+                <InvestigationSection label="Recommended Checks" value={incident.recommendedChecks} asList />
+                <InvestigationSection label="Recommended Actions" value={incident.recommendedAction} asList />
+                <InvestigationSection label="Severity / Urgency" value={incident.urgencyAssessment} />
+                <InvestigationSection label="Transient vs Persistent Assessment" value={incident.persistenceAssessment} />
+                <InvestigationSection label="What to Monitor Next" value={incident.monitorNext} asList />
               </div>
+            </section>
+
+            <section className="surface-card section-card">
+              <div>
+                <div className="card-label">Correlation Timeline</div>
+                <h2 className="section-title">Cross-Signal Story</h2>
+              </div>
+              {incident.correlationTimeline?.length ? (
+                <div className="correlation-timeline">
+                  {incident.correlationTimeline.map((entry, index) => (
+                    <div key={`${entry.timestamp || "unknown"}-${entry.type || "UNKNOWN"}-${index}`} className="correlation-timeline-item">
+                      <div className="correlation-timeline-time">{formatTimelineTime(entry.timestamp)}</div>
+                      <div className="correlation-timeline-body">
+                        <div className="correlation-timeline-header">
+                          <span className="timeline-label">{formatTimelineType(entry.type)}</span>
+                          {entry.metric ? <span className="machine-card-subtle">{entry.metric}</span> : null}
+                          {entry.value !== null && entry.value !== undefined ? (
+                            <span className="machine-card-subtle">{Number(entry.value).toFixed(1)}%</span>
+                          ) : null}
+                        </div>
+                        <div className="timeline-title">{entry.description || "No description available."}</div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <div className="empty-state recent-incidents-empty">
+                  No correlated timeline events available for this incident yet.
+                </div>
+              )}
             </section>
 
             <section className="surface-card section-card">

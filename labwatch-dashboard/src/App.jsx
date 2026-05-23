@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { Suspense, lazy, useState } from "react";
 import {
   BrowserRouter,
   Navigate,
@@ -14,18 +14,19 @@ import PublicOnlyRoute from "./components/PublicOnlyRoute";
 import PublicShell from "./components/PublicShell";
 import RoleGuard from "./components/RoleGuard";
 import { useAuth } from "./context/AuthContext";
-import AnomalyDetailPage from "./pages/AnomalyDetailPage";
-import AnomaliesPage from "./pages/AnomaliesPage";
-import AssistantPage from "./pages/AssistantPage";
-import DashboardPage from "./pages/DashboardPage";
 import HomePage from "./pages/HomePage";
-import IncidentDetailPage from "./pages/IncidentDetailPage";
-import IncidentsPage from "./pages/IncidentsPage";
 import LoginPage from "./pages/LoginPage";
-import MachineDetailPage from "./pages/MachineDetailPage";
-import MachinesPage from "./pages/MachinesPage";
 import RegisterPage from "./pages/RegisterPage";
 import UnauthorizedPage from "./pages/UnauthorizedPage";
+
+const DashboardPage = lazy(() => import("./pages/DashboardPage"));
+const IncidentsPage = lazy(() => import("./pages/IncidentsPage"));
+const IncidentDetailPage = lazy(() => import("./pages/IncidentDetailPage"));
+const AnomaliesPage = lazy(() => import("./pages/AnomaliesPage"));
+const AnomalyDetailPage = lazy(() => import("./pages/AnomalyDetailPage"));
+const MachinesPage = lazy(() => import("./pages/MachinesPage"));
+const MachineDetailPage = lazy(() => import("./pages/MachineDetailPage"));
+const AssistantPage = lazy(() => import("./pages/AssistantPage"));
 
 function LoginRoute() {
   const location = useLocation();
@@ -58,7 +59,6 @@ function LoginRoute() {
       error={authError}
       loading={authLoading}
       notice={sessionNotice}
-      onContinueToDashboard={() => navigate("/dashboard")}
       onShowRegister={() => navigate("/signup")}
       onSubmit={handleLogin}
     />
@@ -94,7 +94,6 @@ function RegisterRoute() {
       error={authError}
       loading={authLoading}
       notice={sessionNotice}
-      onContinueToDashboard={() => navigate("/dashboard")}
       onShowLogin={() => navigate("/login")}
       onSubmit={handleRegister}
     />
@@ -112,6 +111,18 @@ function IncidentDetailRoute() {
       investigationId={decodeURIComponent(investigationId)}
       onBack={() => navigate("/incidents")}
     />
+  );
+}
+
+function RouteLoadingFallback() {
+  return (
+    <div className="route-loading-state">
+      <div className="route-loading-card">
+        <div className="route-loading-badge">Loading</div>
+        <h2>Preparing operational view...</h2>
+        <p>Loading the requested LabWatch workspace.</p>
+      </div>
+    </div>
   );
 }
 
@@ -145,14 +156,70 @@ function AppRouter() {
       <Route element={<ProtectedRoute />}>
         <Route element={<RoleGuard allowedRoles={["ADMIN", "OPERATOR"]} />}>
           <Route element={<AppShell />}>
-            <Route path="/dashboard" element={<DashboardPage />} />
-            <Route path="/incidents" element={<IncidentsPage />} />
-            <Route path="/incidents/:investigationId" element={<IncidentDetailRoute />} />
-            <Route path="/anomalies" element={<AnomaliesPage />} />
-            <Route path="/anomalies/:anomalyId" element={<AnomalyDetailPage />} />
-            <Route path="/machines" element={<MachinesPage />} />
-            <Route path="/machines/:machineIdentifier" element={<MachineDetailPage />} />
-            <Route path="/assistant" element={<AssistantPage />} />
+            <Route
+              path="/dashboard"
+              element={
+                <Suspense fallback={<RouteLoadingFallback />}>
+                  <DashboardPage />
+                </Suspense>
+              }
+            />
+            <Route
+              path="/incidents"
+              element={
+                <Suspense fallback={<RouteLoadingFallback />}>
+                  <IncidentsPage />
+                </Suspense>
+              }
+            />
+            <Route
+              path="/incidents/:investigationId"
+              element={
+                <Suspense fallback={<RouteLoadingFallback />}>
+                  <IncidentDetailRoute />
+                </Suspense>
+              }
+            />
+            <Route
+              path="/anomalies"
+              element={
+                <Suspense fallback={<RouteLoadingFallback />}>
+                  <AnomaliesPage />
+                </Suspense>
+              }
+            />
+            <Route
+              path="/anomalies/:anomalyId"
+              element={
+                <Suspense fallback={<RouteLoadingFallback />}>
+                  <AnomalyDetailPage />
+                </Suspense>
+              }
+            />
+            <Route
+              path="/machines"
+              element={
+                <Suspense fallback={<RouteLoadingFallback />}>
+                  <MachinesPage />
+                </Suspense>
+              }
+            />
+            <Route
+              path="/machines/:machineIdentifier"
+              element={
+                <Suspense fallback={<RouteLoadingFallback />}>
+                  <MachineDetailPage />
+                </Suspense>
+              }
+            />
+            <Route
+              path="/assistant"
+              element={
+                <Suspense fallback={<RouteLoadingFallback />}>
+                  <AssistantPage />
+                </Suspense>
+              }
+            />
             <Route path="/unauthorized" element={<UnauthorizedPage />} />
           </Route>
         </Route>

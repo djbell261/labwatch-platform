@@ -78,13 +78,13 @@ services:
       kafka:
         condition: service_healthy
     environment:
+      SPRING_PROFILES_ACTIVE: ${LABWATCH_SPRING_PROFILE:-demo}
       SERVER_PORT: 8089
       SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/${POSTGRES_DB:-labwatch}
       SPRING_DATASOURCE_USERNAME: ${POSTGRES_USER:-postgres}
       SPRING_DATASOURCE_PASSWORD: ${POSTGRES_PASSWORD:-postgres}
       SPRING_KAFKA_BOOTSTRAP_SERVERS: kafka:29092
       HEALTH_EVENTS_TOPIC: ${HEALTH_EVENTS_TOPIC:-health-events}
-      SPRING_JPA_HIBERNATE_DDL_AUTO: ${SPRING_JPA_HIBERNATE_DDL_AUTO:-update}
       LABWATCH_AUTH_ENABLED: ${LABWATCH_AUTH_ENABLED:-false}
       LABWATCH_AGENT_AUTH_ENABLED: ${LABWATCH_AGENT_AUTH_ENABLED:-false}
       JWT_SECRET: ${JWT_SECRET:-dev-only-secret-change-me}
@@ -110,6 +110,7 @@ services:
       kafka:
         condition: service_healthy
     environment:
+      SPRING_PROFILES_ACTIVE: ${LABWATCH_SPRING_PROFILE:-demo}
       SERVER_PORT: 8088
       SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/${POSTGRES_DB:-labwatch}
       SPRING_DATASOURCE_USERNAME: ${POSTGRES_USER:-postgres}
@@ -119,7 +120,6 @@ services:
       ALERT_EVENTS_TOPIC: ${ALERT_EVENTS_TOPIC:-alert-events}
       HEALTH_EVENTS_DLT_TOPIC: ${ALERT_ENGINE_HEALTH_EVENTS_DLT_TOPIC:-health-events.alert-engine.dlt}
       SPRING_KAFKA_CONSUMER_GROUP_ID: ${ALERT_ENGINE_CONSUMER_GROUP_ID:-alert-engine-group}
-      SPRING_JPA_HIBERNATE_DDL_AUTO: ${SPRING_JPA_HIBERNATE_DDL_AUTO:-update}
       LABWATCH_AUTH_ENABLED: ${LABWATCH_AUTH_ENABLED:-false}
       MONITORING_API_BASE_URL: http://monitoring-api:8089
       LABWATCH_KAFKA_RETRY_ATTEMPTS: ${LABWATCH_KAFKA_RETRY_ATTEMPTS:-3}
@@ -145,6 +145,7 @@ services:
       redis:
         condition: service_healthy
     environment:
+      SPRING_PROFILES_ACTIVE: ${LABWATCH_SPRING_PROFILE:-demo}
       SERVER_PORT: 8091
       SPRING_KAFKA_BOOTSTRAP_SERVERS: kafka:29092
       ALERT_EVENTS_TOPIC: ${ALERT_EVENTS_TOPIC:-alert-events}
@@ -187,6 +188,7 @@ services:
       redis:
         condition: service_healthy
     environment:
+      SPRING_PROFILES_ACTIVE: ${LABWATCH_SPRING_PROFILE:-demo}
       SERVER_PORT: 8090
       SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/${POSTGRES_DB:-labwatch}
       SPRING_DATASOURCE_USERNAME: ${POSTGRES_USER:-postgres}
@@ -199,7 +201,6 @@ services:
       HEALTH_EVENTS_DLT_TOPIC: ${AI_ENGINE_HEALTH_EVENTS_DLT_TOPIC:-health-events.ai-engine.dlt}
       ALERT_EVENTS_DLT_TOPIC: ${AI_ENGINE_ALERT_EVENTS_DLT_TOPIC:-alert-events.ai-engine.dlt}
       SPRING_KAFKA_CONSUMER_GROUP_ID: ${AI_ENGINE_CONSUMER_GROUP_ID:-ai-engine-group}
-      SPRING_JPA_HIBERNATE_DDL_AUTO: ${SPRING_JPA_HIBERNATE_DDL_AUTO:-update}
       SPRING_DATA_REDIS_HOST: redis
       SPRING_DATA_REDIS_PORT: 6379
       ANOMALY_WINDOW_SIZE: ${ANOMALY_WINDOW_SIZE:-10}

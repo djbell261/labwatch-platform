@@ -456,6 +456,26 @@ a {
   line-height: 1.6;
 }
 
+.auth-demo-pill {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-top: 16px;
+  margin-bottom: 16px;
+  padding: 10px 14px;
+  border-radius: 999px;
+  background: rgba(37, 99, 235, 0.12);
+  border: 1px solid rgba(96, 165, 250, 0.18);
+  color: #bfdbfe;
+  font-size: 0.88rem;
+}
+
+.auth-demo-pill-label {
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
 .auth-secondary-link {
   margin-top: 16px;
   padding: 0;
@@ -509,4 +529,44 @@ a {
     align-items: flex-start;
     flex-direction: column;
   }
+}
+
+.route-loading-state {
+  min-height: calc(100vh - 120px);
+  display: grid;
+  place-items: center;
+  padding: 48px 24px;
+}
+
+.route-loading-card {
+  width: min(420px, 100%);
+  padding: 28px;
+  border-radius: 28px;
+  border: 1px solid rgba(128, 156, 214, 0.18);
+  background: linear-gradient(180deg, rgba(17, 24, 40, 0.92), rgba(12, 18, 31, 0.96));
+  box-shadow: 0 24px 60px rgba(5, 10, 20, 0.34);
+}
+
+.route-loading-card h2 {
+  margin: 0 0 10px;
+  color: #f3f7ff;
+}
+
+.route-loading-card p {
+  margin: 0;
+  color: rgba(202, 214, 240, 0.75);
+}
+
+.route-loading-badge {
+  display: inline-flex;
+  align-items: center;
+  margin-bottom: 14px;
+  padding: 6px 12px;
+  border-radius: 999px;
+  background: rgba(74, 122, 214, 0.22);
+  color: #9fc1ff;
+  font-size: 0.78rem;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
 }

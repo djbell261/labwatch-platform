@@ -1,5 +1,6 @@
 import EmptyState from "./states/EmptyState";
 import ErrorState from "./states/ErrorState";
+import { formatDuration, groupInvestigationsByIncident } from "../utils/operations";
 
 function formatIncidentTime(value) {
   if (!value) {
@@ -70,7 +71,7 @@ function RecentIncidentsPanel({
   onViewAll,
   limit = 5,
 }) {
-  const visibleInvestigations = investigations.slice(0, limit);
+  const visibleInvestigations = groupInvestigationsByIncident(investigations).slice(0, limit);
 
   return (
     <section className="surface-card section-card">
@@ -112,12 +113,18 @@ function RecentIncidentsPanel({
                     <span className={`status-dot ${severityTone}`} />
                     {incident.severity || "UNKNOWN"}
                   </span>
-                  <span className="incident-confidence">{incident.confidence || "UNKNOWN"} confidence</span>
+                  <span className="incident-confidence">
+                    {incident.confidenceScore ? `${incident.confidenceScore}%` : incident.confidence || "UNKNOWN"} confidence
+                  </span>
                 </div>
                 <div className="incident-machine">{incident.machineIdentifier || "Unknown machine"}</div>
                 <div className="incident-meta-row">
-                  <span className="incident-alert-type">{incident.alertType || "Unknown alert"}</span>
+                  <span className="incident-alert-type">{incident.affectedMetrics || incident.alertType || "Unknown metric"}</span>
                   <span className="incident-created-at">{formatIncidentTime(incident.createdAt)}</span>
+                </div>
+                <div className="incident-meta-row">
+                  <span className="incident-alert-type">{incident.suspectedContributor || "Unknown contributor"}</span>
+                  <span className="incident-created-at">{formatDuration(incident.durationMs)}</span>
                 </div>
                 <p className="incident-summary incident-summary-compact">{truncate(incident.summary, 140)}</p>
                 <div className="preview-card-actions">

@@ -89,6 +89,8 @@ function DashboardPage() {
     investigationsLoading,
     latestTelemetry,
     machines,
+    machinesError,
+    machinesLoading,
     recentInvestigations,
     socketStatus,
     telemetryError,
@@ -135,9 +137,16 @@ function DashboardPage() {
     () => [
       {
         service: "monitoring-api",
-        status: telemetryError ? "Needs attention" : "Healthy",
-        detail: telemetryError || "Telemetry and machine data are loading normally.",
-        tone: telemetryError ? "yellow" : "green",
+        status: telemetryError || machinesError ? "Needs attention" : "Healthy",
+        detail:
+          telemetryError
+          || machinesError
+          || ((machinesLoading && machines.length === 0)
+            ? "Telemetry and machine data are loading."
+            : machines.length === 0
+              ? "No machines reporting yet."
+              : "Telemetry and machine data are loading normally."),
+        tone: telemetryError || machinesError ? "yellow" : "green",
       },
       {
         service: "alert-engine",
@@ -159,7 +168,17 @@ function DashboardPage() {
         tone: "blue",
       },
     ],
-    [activeAlerts.length, alertsError, anomaliesError, insightError, normalizedAnomalies.length, telemetryError]
+    [
+      activeAlerts.length,
+      alertsError,
+      anomaliesError,
+      insightError,
+      machines.length,
+      machinesError,
+      machinesLoading,
+      normalizedAnomalies.length,
+      telemetryError,
+    ]
   );
   const activityItems = useMemo(() => {
     const alertItems = activeAlerts.map((alert) => ({
@@ -200,7 +219,7 @@ function DashboardPage() {
       .slice(0, ACTIVITY_PREVIEW_LIMIT);
   }, [activeAlerts, normalizedAnomalies, recentInvestigations]);
 
-  const serviceNotices = [telemetryError, alertsError, anomaliesError, investigationsError].filter(Boolean);
+  const serviceNotices = [machinesError, telemetryError, alertsError, anomaliesError, investigationsError].filter(Boolean);
 
   return (
     <div className="content-page">

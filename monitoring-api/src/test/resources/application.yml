@@ -13,6 +13,8 @@ spring:
       hibernate:
         format_sql: false
         dialect: org.hibernate.dialect.H2Dialect
+  flyway:
+    enabled: false
 
   kafka:
     bootstrap-servers: localhost:9092

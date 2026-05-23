@@ -3,7 +3,6 @@ import { useState } from "react";
 function LoginPage({
   onSubmit,
   onShowRegister,
-  onContinueToDashboard,
   loading = false,
   error = "",
   notice = "",
@@ -21,58 +20,54 @@ function LoginPage({
         <h1 className="auth-title">Sign in</h1>
         <p className="auth-copy">
           {authDisabled
-            ? "Authentication is disabled for this local demo environment."
+            ? "Enter the demo workspace through a local authentication flow designed for recruiter and showcase environments."
             : "Continue to your machines, telemetry, alerts, and AI monitoring workspace."}
         </p>
 
         {notice ? <div className="auth-notice">{notice}</div> : null}
-
         {authDisabled ? (
-          <div className="auth-demo-state">
-            <div className="auth-demo-message">
-              Local mode keeps the operational app open without requiring credentials. You can still preview the auth
-              entry experience here.
-            </div>
-            <button type="button" className="auth-submit-button" onClick={onContinueToDashboard}>
-              Continue to Dashboard
-            </button>
+          <div className="auth-demo-pill">
+            <span className="auth-demo-pill-label">Demo authentication mode</span>
+            <span>Local environment</span>
           </div>
-        ) : (
-          <form
-            onSubmit={(event) => {
-              event.preventDefault();
-              onSubmit({ email, password });
-            }}
-            className="auth-form"
-          >
-            <input
-              type="email"
-              placeholder="Email"
-              value={email}
-              onChange={(event) => setEmail(event.target.value)}
-              className="auth-input"
-            />
-            <input
-              type="password"
-              placeholder="Password"
-              value={password}
-              onChange={(event) => setPassword(event.target.value)}
-              className="auth-input"
-            />
-            {error ? <div className="auth-error">{error}</div> : null}
-            <button type="submit" disabled={loading} className={`auth-submit-button ${loading ? "is-loading" : ""}`}>
-              {loading ? "Signing in..." : "Login"}
-            </button>
-          </form>
-        )}
+        ) : null}
 
-        <button
-          type="button"
-          onClick={onShowRegister}
-          className="auth-secondary-link"
+        <form
+          onSubmit={(event) => {
+            event.preventDefault();
+            onSubmit({ email, password });
+          }}
+          className="auth-form"
         >
-          Need an account? Sign Up
-        </button>
+          <input
+            type="email"
+            placeholder={authDisabled ? "demo@labwatch.local" : "Email"}
+            value={email}
+            onChange={(event) => setEmail(event.target.value)}
+            className="auth-input"
+          />
+          <input
+            type="password"
+            placeholder={authDisabled ? "Any password works in demo mode" : "Password"}
+            value={password}
+            onChange={(event) => setPassword(event.target.value)}
+            className="auth-input"
+          />
+          {error ? <div className="auth-error">{error}</div> : null}
+          <button type="submit" disabled={loading} className={`auth-submit-button ${loading ? "is-loading" : ""}`}>
+            {loading ? "Signing in..." : authDisabled ? "Enter Demo Workspace" : "Login"}
+          </button>
+        </form>
+
+        {!authDisabled ? (
+          <button
+            type="button"
+            onClick={onShowRegister}
+            className="auth-secondary-link"
+          >
+            Need an account? Sign Up
+          </button>
+        ) : null}
       </div>
     </section>
   );

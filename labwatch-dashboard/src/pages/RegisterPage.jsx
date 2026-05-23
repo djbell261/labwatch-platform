@@ -3,7 +3,6 @@ import { useState } from "react";
 function RegisterPage({
   onSubmit,
   onShowLogin,
-  onContinueToDashboard,
   loading = false,
   error = "",
   notice = "",
@@ -22,20 +21,26 @@ function RegisterPage({
         <h1 className="auth-title">Create account</h1>
         <p className="auth-copy">
           {authDisabled
-            ? "Authentication is disabled for this local demo environment."
+            ? "Registration is intentionally disabled in the local demo environment so the product stays stable and curated."
             : "Create a lightweight LabWatch account so you can claim machines and separate device ownership later."}
         </p>
 
         {notice ? <div className="auth-notice">{notice}</div> : null}
+        {authDisabled ? (
+          <div className="auth-demo-pill">
+            <span className="auth-demo-pill-label">Demo mode</span>
+            <span>Registration unavailable</span>
+          </div>
+        ) : null}
 
         {authDisabled ? (
           <div className="auth-demo-state">
             <div className="auth-demo-message">
-              Sign up is not required in local demo mode. Jump straight into the monitoring workspace when you are
-              ready.
+              Local demo environments use a shared operator experience. Use the sign in flow to enter the app with a
+              demo session instead of creating a new account.
             </div>
-            <button type="button" className="auth-submit-button" onClick={onContinueToDashboard}>
-              Continue to Dashboard
+            <button type="button" className="auth-submit-button" onClick={onShowLogin}>
+              Go to Login
             </button>
           </div>
         ) : (
@@ -74,13 +79,15 @@ function RegisterPage({
           </form>
         )}
 
-        <button
-          type="button"
-          onClick={onShowLogin}
-          className="auth-secondary-link"
-        >
-          Already have an account? Login
-        </button>
+        {!authDisabled ? (
+          <button
+            type="button"
+            onClick={onShowLogin}
+            className="auth-secondary-link"
+          >
+            Already have an account? Login
+          </button>
+        ) : null}
       </div>
     </section>
   );

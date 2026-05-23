@@ -25,11 +25,13 @@ export function useOperationsData(scopeMachineIdentifier = "") {
   const [recentInvestigations, setRecentInvestigations] = useState([]);
   const [insightSource, setInsightSource] = useState("backend");
   const [socketStatus, setSocketStatus] = useState("connecting");
+  const [machinesLoading, setMachinesLoading] = useState(true);
   const [telemetryLoading, setTelemetryLoading] = useState(true);
   const [alertsLoading, setAlertsLoading] = useState(true);
   const [anomaliesLoading, setAnomaliesLoading] = useState(true);
   const [investigationsLoading, setInvestigationsLoading] = useState(true);
   const [insightLoading, setInsightLoading] = useState(true);
+  const [machinesError, setMachinesError] = useState("");
   const [telemetryError, setTelemetryError] = useState("");
   const [alertsError, setAlertsError] = useState("");
   const [anomaliesError, setAnomaliesError] = useState("");
@@ -38,14 +40,21 @@ export function useOperationsData(scopeMachineIdentifier = "") {
   const [claimError, setClaimError] = useState("");
 
   const refreshMachines = useCallback(async (isMountedRef) => {
+    setMachinesLoading(true);
     try {
       const response = await getMachines();
       if (isMountedRef.current) {
         setMachines(response);
+        setMachinesError("");
       }
     } catch (error) {
       if (isMountedRef.current) {
+        setMachinesError("Machine inventory is unavailable.");
         console.error(error?.message || "Unable to load machines.");
+      }
+    } finally {
+      if (isMountedRef.current) {
+        setMachinesLoading(false);
       }
     }
   }, []);
@@ -331,6 +340,8 @@ export function useOperationsData(scopeMachineIdentifier = "") {
     investigationsLoading,
     latestTelemetry,
     machines,
+    machinesError,
+    machinesLoading,
     recentInvestigations,
     refreshAll,
     selectedMachine,

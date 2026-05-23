@@ -7,6 +7,7 @@ import com.example.aiengineservice.dto.external.TelemetrySnapshotDetailResponse;
 import com.example.aiengineservice.entity.Anomaly;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.core.ParameterizedTypeReference;
 import org.springframework.stereotype.Service;
@@ -35,15 +36,30 @@ public class AiInsightRequestBuilder {
     private final RestClient monitoringApiClient;
     private final RestClient alertEngineClient;
     private final AnomalyQueryService anomalyQueryService;
+    private final KnownProcessEnrichmentService processEnrichmentService;
 
-    public AiInsightRequestBuilder(
+    AiInsightRequestBuilder(
             AnomalyQueryService anomalyQueryService,
             @Value("${services.monitoring-api.base-url:http://monitoring-api:8089}") String monitoringApiBaseUrl,
             @Value("${services.alert-engine.base-url:http://alert-engine:8088}") String alertEngineBaseUrl,
             @Value("${services.http.connect-timeout-ms:2000}") int connectTimeoutMs,
             @Value("${services.http.read-timeout-ms:3000}") int readTimeoutMs
     ) {
+        this(anomalyQueryService, monitoringApiBaseUrl, alertEngineBaseUrl, connectTimeoutMs, readTimeoutMs,
+                new KnownProcessEnrichmentService());
+    }
+
+    @Autowired
+    public AiInsightRequestBuilder(
+            AnomalyQueryService anomalyQueryService,
+            @Value("${services.monitoring-api.base-url:http://monitoring-api:8089}") String monitoringApiBaseUrl,
+            @Value("${services.alert-engine.base-url:http://alert-engine:8088}") String alertEngineBaseUrl,
+            @Value("${services.http.connect-timeout-ms:2000}") int connectTimeoutMs,
+            @Value("${services.http.read-timeout-ms:3000}") int readTimeoutMs,
+            KnownProcessEnrichmentService processEnrichmentService
+    ) {
         this.anomalyQueryService = anomalyQueryService;
+        this.processEnrichmentService = processEnrichmentService;
         this.monitoringApiClient = RestClient.builder()
                 .baseUrl(monitoringApiBaseUrl)
                 .requestFactory(buildRequestFactory(connectTimeoutMs, readTimeoutMs))
@@ -80,8 +96,13 @@ public class AiInsightRequestBuilder {
                 .toList();
 
         ProcessMetricResponse topProcess = findTopProcess(latestTelemetry.getProcessMetrics());
+        ProcessMetricResponse topCpuProcess = findTopCpuProcess(latestTelemetry.getProcessMetrics());
+        ProcessMetricResponse topMemoryProcess = findTopMemoryProcess(latestTelemetry.getProcessMetrics());
 
         return AiInsightRequest.builder()
+                .machineIdentifier(machineIdentifier != null && !machineIdentifier.isBlank()
+                        ? machineIdentifier
+                        : latestTelemetry.getMachineIdentifier())
                 .cpuUsage(safeDouble(latestTelemetry.getCpuUsage()))
                 .memoryUsage(safeDouble(latestTelemetry.getMemoryUsage()))
                 .diskUsage(safeDouble(latestTelemetry.getDiskUsage()))
@@ -97,7 +118,10 @@ public class AiInsightRequestBuilder {
                                 .severity(anomalySeverity.isEmpty() ? List.of() : anomalySeverity)
                                 .build()
                 )
+                .recentMetricTrend("Current telemetry snapshot captured for operator triage.")
                 .topProcess(toTopProcessSummary(topProcess))
+                .topCpuProcess(toTopProcessSummary(topCpuProcess))
+                .topMemoryProcess(toTopProcessSummary(topMemoryProcess))
                 .timestamp(latestTelemetry.getTimestamp() != null ? latestTelemetry.getTimestamp() : LocalDateTime.now())
                 .build();
     }
@@ -224,19 +248,54 @@ public class AiInsightRequestBuilder {
                 .orElse(null);
     }
 
+    private ProcessMetricResponse findTopCpuProcess(List<ProcessMetricResponse> processMetrics) {
+        if (processMetrics == null || processMetrics.isEmpty()) {
+            return null;
+        }
+
+        return processMetrics.stream()
+                .max(Comparator.comparing(
+                        ProcessMetricResponse::getCpuPercent,
+                        Comparator.nullsLast(Double::compareTo)
+                ))
+                .orElse(null);
+    }
+
+    private ProcessMetricResponse findTopMemoryProcess(List<ProcessMetricResponse> processMetrics) {
+        if (processMetrics == null || processMetrics.isEmpty()) {
+            return null;
+        }
+
+        return processMetrics.stream()
+                .max(Comparator.comparing(
+                        ProcessMetricResponse::getMemoryPercent,
+                        Comparator.nullsLast(Double::compareTo)
+                ))
+                .orElse(null);
+    }
+
     private AiInsightRequest.TopProcessSummary toTopProcessSummary(ProcessMetricResponse topProcess) {
         if (topProcess == null) {
             log.info("No top process available; using default top process fallback");
             return DEFAULT_TOP_PROCESS;
         }
 
-        return AiInsightRequest.TopProcessSummary.builder()
+        AiInsightRequest.TopProcessSummary.TopProcessSummaryBuilder builder = AiInsightRequest.TopProcessSummary.builder()
                 .name(topProcess.getProcessName() != null && !topProcess.getProcessName().isBlank()
                         ? topProcess.getProcessName()
                         : "unknown")
                 .cpu(safeDouble(topProcess.getCpuPercent()))
-                .memory(safeDouble(topProcess.getMemoryPercent()))
-                .build();
+                .memory(safeDouble(topProcess.getMemoryPercent()));
+
+        processEnrichmentService.enrich(topProcess.getProcessName())
+                .ifPresent(insight -> builder
+                        .category(insight.category())
+                        .humanExplanation(insight.humanExplanation())
+                        .likelyCauses(insight.likelyCauses())
+                        .operatorAdvice(insight.operatorAdvice())
+                        .beginnerFriendly(insight.beginnerFriendly()));
+
+        return builder.build();
     }
 
     private double safeDouble(Double value) {

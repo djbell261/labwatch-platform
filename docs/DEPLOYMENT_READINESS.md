@@ -5,11 +5,17 @@ This guide summarizes the production-shaped defaults and demo-friendly setup for
 ## Environment Setup
 
 1. Copy `.env.example` to `.env`.
+2. For hosted deployment, start from `.env.production.example`.
 2. Set `JWT_SECRET` to a non-default value for any shared or cloud-hosted environment.
-3. Choose one auth mode:
+3. Choose one Spring runtime profile with `LABWATCH_SPRING_PROFILE`:
+   - Local development: `local`
+   - Demo/recruiter mode: `demo`
+   - Hosted pre-production: `staging`
+   - Production: `prod`
+4. Choose one auth mode:
    - Local demo mode: `LABWATCH_AUTH_ENABLED=false`
    - Auth-enabled MVP mode: `LABWATCH_AUTH_ENABLED=true`
-4. Choose one AI mode:
+5. Choose one AI mode:
    - Stable local/demo mode: `AI_PROVIDER=mock`
    - Hosted AI mode: set `AI_PROVIDER`, `OPENAI_API_KEY`, and `OPENAI_MODEL`
 
@@ -66,6 +72,8 @@ Phase 2 adds the following production-shaped behavior:
 - stable default AI provider in Compose: `mock`
 - structured log formatting with service name and request ID support
 - startup summary logging for the Spring services
+- Flyway migrations with per-service schema history tables
+- `ddl-auto=validate` for deployment-shaped startup behavior
 
 ## Troubleshooting
 
@@ -118,5 +126,4 @@ These are intentionally deferred beyond Phase 2:
 - TLS termination
 - cloud networking and IAM design
 - distributed tracing stack
-- formal database migrations
 - production autoscaling and multi-AZ topology

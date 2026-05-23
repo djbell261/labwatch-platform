@@ -57,17 +57,44 @@ class AiInvestigationControllerTest {
                 .andExpect(jsonPath("$[0].alertId").value("1003"));
     }
 
+    @Test
+    void returnsInvestigationsForIncident() throws Exception {
+        when(aiInvestigationQueryService.findByIncidentId("incident-1"))
+                .thenReturn(List.of(response("inv-4", "1004", "machine-c")));
+
+        mockMvc.perform(get("/api/investigations/incident/incident-1"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$[0].incidentId").value("incident-inv-4"));
+    }
+
     private AiInvestigationResponse response(String investigationId, String alertId, String machineIdentifier) {
         return new AiInvestigationResponse(
                 investigationId,
+                "incident-" + investigationId,
+                machineIdentifier + "|chrome|MEMORY",
+                "ACTIVE",
                 alertId,
                 machineIdentifier,
                 "MEMORY",
                 "HIGH",
                 "summary",
                 "likely cause",
+                "- evidence",
+                "- contributing factor",
+                "- recommended check",
                 "recommended action",
-                "HIGH",
+                "urgency",
+                "persistence",
+                "- monitor next",
+                "chrome",
+                "MEMORY",
+                72,
+                "MEDIUM",
+                "- process evidence available",
+                "Recent baseline",
+                "Repeated chrome pattern",
+                List.of(),
+                "MEDIUM (72%)",
                 LocalDateTime.of(2026, 5, 5, 13, 32),
                 LocalDateTime.of(2026, 5, 5, 14, 0)
         );

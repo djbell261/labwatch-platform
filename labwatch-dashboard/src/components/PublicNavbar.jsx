@@ -3,7 +3,7 @@ import { useAuth } from "../context/AuthContext";
 
 function PublicNavbar() {
   const navigate = useNavigate();
-  const { isAuthenticated, logout } = useAuth();
+  const { authEnabled, isAuthenticated, logout } = useAuth();
 
   const handleLogout = () => {
     logout();
@@ -33,9 +33,11 @@ function PublicNavbar() {
               <NavLink className="public-nav-link" to="/login">
                 Login
               </NavLink>
-              <NavLink className="public-nav-button primary" to="/signup">
-                Sign Up
-              </NavLink>
+              {authEnabled ? (
+                <NavLink className="public-nav-button primary" to="/signup">
+                  Sign Up
+                </NavLink>
+              ) : null}
             </>
           ) : null}
 

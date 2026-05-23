@@ -35,4 +35,11 @@ public class AiInvestigationQueryService {
                 .map(AiInvestigationResponse::fromEntity)
                 .toList();
     }
+
+    public List<AiInvestigationResponse> findByIncidentId(String incidentId) {
+        return aiInvestigationRepository.findByIncidentIdOrderByCreatedAtDesc(incidentId)
+                .stream()
+                .map(AiInvestigationResponse::fromEntity)
+                .toList();
+    }
 }

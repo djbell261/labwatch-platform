@@ -1,16 +1,29 @@
-# React + Vite
+# LabWatch Dashboard
 
-This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
+Frontend workspace for the LabWatch monitoring platform.
 
-Currently, two official plugins are available:
+## Local API wiring
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Oxc](https://oxc.rs)
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/)
+The dashboard expects these local backend defaults:
 
-## React Compiler
+```env
+VITE_MONITORING_API_URL=http://localhost:8089
+VITE_ALERT_ENGINE_URL=http://localhost:8088
+VITE_AI_ENGINE_URL=http://localhost:8090
+VITE_NOTIFICATION_SERVICE_URL=http://localhost:8091
+```
 
-The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
+Copy [`.env.example`](/Users/derwinbell/dev/ResumeProjects/labwatch-platform/labwatch-dashboard/.env.example) to `.env.local` if you want to override the frontend defaults.
 
-## Expanding the ESLint configuration
+## Backend health checks
 
-If you are developing a production application, we recommend using TypeScript with type-aware lint rules enabled. Check out the [TS template](https://github.com/vitejs/vite/tree/main/packages/create-vite/template-react-ts) for information on how to integrate TypeScript and [`typescript-eslint`](https://typescript-eslint.io) in your project.
+Operational pages like `/dashboard`, `/incidents`, `/anomalies`, and `/machines` depend on the backend services being reachable:
+
+```bash
+curl http://localhost:8089/actuator/health
+curl http://localhost:8088/actuator/health
+curl http://localhost:8090/actuator/health
+curl http://localhost:8091/actuator/health
+```
+
+If these are healthy, the frontend should show empty/demo states for missing data rather than generic service-unavailable messaging.

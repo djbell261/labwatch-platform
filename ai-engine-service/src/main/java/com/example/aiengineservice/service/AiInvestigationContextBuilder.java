@@ -1,6 +1,7 @@
 package com.example.aiengineservice.service;
 
 import com.example.aiengineservice.dto.AlertEventMessage;
+import com.example.aiengineservice.dto.external.AlertResponse;
 import com.example.aiengineservice.dto.external.ProcessMetricResponse;
 import com.example.aiengineservice.dto.external.TelemetrySnapshotDetailResponse;
 import com.example.aiengineservice.entity.Anomaly;
@@ -23,20 +24,29 @@ public class AiInvestigationContextBuilder {
     private static final ParameterizedTypeReference<List<TelemetrySnapshotDetailResponse>> TELEMETRY_LIST_TYPE =
             new ParameterizedTypeReference<>() {
             };
+    private static final ParameterizedTypeReference<List<AlertResponse>> ALERT_LIST_TYPE =
+            new ParameterizedTypeReference<>() {
+            };
     private static final TelemetrySnapshotDetailResponse DEFAULT_TELEMETRY = buildDefaultTelemetry();
 
     private final RestClient monitoringApiClient;
+    private final RestClient alertEngineClient;
     private final AnomalyQueryService anomalyQueryService;
 
     public AiInvestigationContextBuilder(
             AnomalyQueryService anomalyQueryService,
             @Value("${services.monitoring-api.base-url:http://monitoring-api:8089}") String monitoringApiBaseUrl,
+            @Value("${services.alert-engine.base-url:http://alert-engine:8088}") String alertEngineBaseUrl,
             @Value("${services.http.connect-timeout-ms:2000}") int connectTimeoutMs,
             @Value("${services.http.read-timeout-ms:3000}") int readTimeoutMs
     ) {
         this.anomalyQueryService = anomalyQueryService;
         this.monitoringApiClient = RestClient.builder()
                 .baseUrl(monitoringApiBaseUrl)
+                .requestFactory(buildRequestFactory(connectTimeoutMs, readTimeoutMs))
+                .build();
+        this.alertEngineClient = RestClient.builder()
+                .baseUrl(alertEngineBaseUrl)
                 .requestFactory(buildRequestFactory(connectTimeoutMs, readTimeoutMs))
                 .build();
     }
@@ -46,13 +56,19 @@ public class AiInvestigationContextBuilder {
         List<TelemetrySnapshotDetailResponse> recentTelemetry = fetchRecentTelemetry(machineIdentifier);
         TelemetrySnapshotDetailResponse latestTelemetry = recentTelemetry.isEmpty() ? DEFAULT_TELEMETRY : recentTelemetry.get(0);
         List<Anomaly> recentAnomalies = fetchRecentAnomalies(machineIdentifier);
+        List<AlertResponse> activeAlerts = fetchActiveAlerts(machineIdentifier);
+        ProcessMetricResponse topCpuProcess = findTopCpuProcess(latestTelemetry.getProcessMetrics());
+        ProcessMetricResponse topMemoryProcess = findTopMemoryProcess(latestTelemetry.getProcessMetrics());
 
         return new AiInvestigationContext(
                 latestTelemetry,
                 recentTelemetry,
                 recentAnomalies,
+                activeAlerts,
                 summarizeTrend(alertEventMessage, recentTelemetry),
-                findTopProcess(latestTelemetry.getProcessMetrics())
+                findTopProcess(latestTelemetry.getProcessMetrics()),
+                topCpuProcess,
+                topMemoryProcess
         );
     }
 
@@ -91,6 +107,33 @@ public class AiInvestigationContextBuilder {
             return anomalies.stream().limit(3).toList();
         } catch (Exception exception) {
             log.warn("Anomaly query failed while building investigation context: {}", exception.getMessage());
+            return List.of();
+        }
+    }
+
+    private List<AlertResponse> fetchActiveAlerts(String machineIdentifier) {
+        try {
+            List<AlertResponse> alerts = alertEngineClient.get()
+                    .uri(uriBuilder -> {
+                        var builder = uriBuilder.path("/api/alerts");
+                        if (machineIdentifier != null && !machineIdentifier.isBlank()) {
+                            builder = builder.queryParam("machineIdentifier", machineIdentifier);
+                        }
+                        return builder.build();
+                    })
+                    .retrieve()
+                    .body(ALERT_LIST_TYPE);
+
+            if (alerts == null || alerts.isEmpty()) {
+                return List.of();
+            }
+
+            return alerts.stream()
+                    .filter(alert -> "ACTIVE".equalsIgnoreCase(alert.getStatus()))
+                    .limit(5)
+                    .toList();
+        } catch (Exception exception) {
+            log.warn("Alert query failed while building investigation context: {}", exception.getMessage());
             return List.of();
         }
     }
@@ -157,6 +200,32 @@ public class AiInvestigationContextBuilder {
                 .orElse(null);
     }
 
+    private ProcessMetricResponse findTopCpuProcess(List<ProcessMetricResponse> processMetrics) {
+        if (processMetrics == null || processMetrics.isEmpty()) {
+            return null;
+        }
+
+        return processMetrics.stream()
+                .max(Comparator.comparing(
+                        ProcessMetricResponse::getCpuPercent,
+                        Comparator.nullsLast(Double::compareTo)
+                ))
+                .orElse(null);
+    }
+
+    private ProcessMetricResponse findTopMemoryProcess(List<ProcessMetricResponse> processMetrics) {
+        if (processMetrics == null || processMetrics.isEmpty()) {
+            return null;
+        }
+
+        return processMetrics.stream()
+                .max(Comparator.comparing(
+                        ProcessMetricResponse::getMemoryPercent,
+                        Comparator.nullsLast(Double::compareTo)
+                ))
+                .orElse(null);
+    }
+
     private static TelemetrySnapshotDetailResponse buildDefaultTelemetry() {
         TelemetrySnapshotDetailResponse telemetry = new TelemetrySnapshotDetailResponse();
         telemetry.setCpuUsage(0.0);
@@ -181,8 +250,11 @@ public class AiInvestigationContextBuilder {
             TelemetrySnapshotDetailResponse latestTelemetry,
             List<TelemetrySnapshotDetailResponse> recentTelemetry,
             List<Anomaly> recentAnomalies,
+            List<AlertResponse> activeAlerts,
             String recentMetricTrend,
-            ProcessMetricResponse topProcess
+            ProcessMetricResponse topProcess,
+            ProcessMetricResponse topCpuProcess,
+            ProcessMetricResponse topMemoryProcess
     ) {
     }
 }

@@ -34,7 +34,7 @@ function HomePage() {
       return;
     }
 
-    navigate("/signup");
+    navigate(authEnabled ? "/signup" : "/login");
   };
 
   const handleOpenDashboard = () => {
@@ -132,12 +132,14 @@ function HomePage() {
               <button type="button" className="home-secondary-button" onClick={() => navigate("/login")}>
                 Login
               </button>
-              <button type="button" className="home-secondary-button" onClick={() => navigate("/signup")}>
-                Sign Up
-              </button>
+              {authEnabled ? (
+                <button type="button" className="home-secondary-button" onClick={() => navigate("/signup")}>
+                  Sign Up
+                </button>
+              ) : null}
             </>
           ) : null}
-          {authEnabled && isAuthenticated ? (
+          {isAuthenticated ? (
             <button type="button" className="home-secondary-button" onClick={handleLogout}>
               Logout
             </button>

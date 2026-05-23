@@ -187,6 +187,62 @@ export function truncate(value, limit = 120) {
   return content.length > limit ? `${content.slice(0, limit - 1)}...` : content;
 }
 
+export function groupInvestigationsByIncident(investigations = []) {
+  const groups = new Map();
+
+  investigations.forEach((investigation) => {
+    const incidentId = investigation?.incidentId || investigation?.investigationId || "unknown-incident";
+    const existing = groups.get(incidentId) || [];
+    existing.push(investigation);
+    groups.set(incidentId, existing);
+  });
+
+  return Array.from(groups.values()).map((items) => {
+    const sortedItems = [...items].sort((left, right) => {
+      const rightTime = new Date(right?.createdAt || 0).getTime();
+      const leftTime = new Date(left?.createdAt || 0).getTime();
+      return rightTime - leftTime;
+    });
+    const primary = sortedItems[0] || {};
+    const affectedMetrics = Array.from(
+      new Set(
+        sortedItems
+          .flatMap((item) => String(item?.affectedMetrics || item?.alertType || "UNKNOWN").split(","))
+          .map((metric) => metric.trim().toUpperCase())
+          .filter(Boolean)
+      )
+    );
+    const startTimes = sortedItems
+      .map((item) => new Date(item?.createdAt || 0).getTime())
+      .filter((time) => Number.isFinite(time) && time > 0);
+    const firstTime = startTimes.length ? Math.min(...startTimes) : null;
+    const lastTime = startTimes.length ? Math.max(...startTimes) : null;
+    const durationMs = firstTime && lastTime ? Math.max(0, lastTime - firstTime) : 0;
+
+    return {
+      ...primary,
+      relatedInvestigationCount: Math.max(0, sortedItems.length - 1),
+      groupedInvestigations: sortedItems,
+      affectedMetrics: affectedMetrics.join(", "),
+      firstSignalAt: firstTime ? new Date(firstTime).toISOString() : primary.createdAt,
+      lastSignalAt: lastTime ? new Date(lastTime).toISOString() : primary.createdAt,
+      durationMs,
+    };
+  });
+}
+
+export function formatDuration(durationMs) {
+  const numericValue = Number(durationMs);
+  if (!Number.isFinite(numericValue) || numericValue <= 0) {
+    return "Single signal";
+  }
+  const minutes = Math.max(1, Math.round(numericValue / 60000));
+  if (minutes < 60) {
+    return `${minutes}m`;
+  }
+  return `${Math.round(minutes / 60)}h`;
+}
+
 export function getLatestSnapshot(snapshots) {
   if (!Array.isArray(snapshots) || snapshots.length === 0) {
     return null;

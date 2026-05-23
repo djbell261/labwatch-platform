@@ -4,13 +4,13 @@ server:
 spring:
   application:
     name: notification-service
-
+  profiles:
+    default: local
   data:
     redis:
       host: ${SPRING_DATA_REDIS_HOST:localhost}
       port: ${SPRING_DATA_REDIS_PORT:6379}
       timeout: ${SPRING_DATA_REDIS_TIMEOUT:2s}
-
   kafka:
     bootstrap-servers: ${SPRING_KAFKA_BOOTSTRAP_SERVERS:${KAFKA_BOOTSTRAP_SERVERS:localhost:9092}}
     consumer:
@@ -77,9 +77,45 @@ app:
       ai-investigation-events-dlt: ${AI_INVESTIGATION_EVENTS_DLT_TOPIC:ai-investigation-events.notification-service.dlt}
 
 labwatch:
+  cors:
+    allowed-origins: ${LABWATCH_ALLOWED_ORIGINS:http://localhost:5173,http://127.0.0.1:5173,http://localhost:5174,http://127.0.0.1:5174}
   notifications:
     cooldown-seconds: ${LABWATCH_NOTIFICATIONS_COOLDOWN_SECONDS:300}
     email:
       enabled: ${LABWATCH_NOTIFICATIONS_EMAIL_ENABLED:false}
       to: ${LABWATCH_ALERT_EMAIL_TO:}
       from: ${LABWATCH_ALERT_EMAIL_FROM:labwatch@localhost}
+
+---
+spring:
+  config:
+    activate:
+      on-profile: local
+
+labwatch:
+  notifications:
+    email:
+      enabled: false
+
+---
+spring:
+  config:
+    activate:
+      on-profile: demo
+
+labwatch:
+  notifications:
+    email:
+      enabled: false
+
+---
+spring:
+  config:
+    activate:
+      on-profile: staging
+
+---
+spring:
+  config:
+    activate:
+      on-profile: prod

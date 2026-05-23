@@ -3,6 +3,27 @@ import { createContext, useCallback, useContext, useEffect, useMemo, useState } 
 import { AUTH_INVALIDATED_EVENT, AUTH_STORAGE_KEY, getAuthConfig, loginUser, registerUser } from "../services/api";
 
 const AuthContext = createContext(null);
+const DEMO_AUTH_EXPIRATION_MS = 12 * 60 * 60 * 1000;
+
+function buildDemoAuth(credentials = {}) {
+  const normalizedEmail = typeof credentials.email === "string" && credentials.email.trim()
+    ? credentials.email.trim().toLowerCase()
+    : "demo@labwatch.local";
+  const rawDisplayName = normalizedEmail.split("@")[0].replace(/[._-]+/g, " ").trim();
+  const displayName = rawDisplayName
+    ? rawDisplayName.replace(/\b\w/g, (character) => character.toUpperCase())
+    : "Demo Operator";
+
+  return {
+    token: "labwatch-demo-session",
+    userId: "demo-operator",
+    email: normalizedEmail,
+    displayName,
+    role: "OPERATOR",
+    expiresAt: new Date(Date.now() + DEMO_AUTH_EXPIRATION_MS).toISOString(),
+    mode: "demo",
+  };
+}
 
 function readStoredAuth() {
   try {
@@ -31,6 +52,7 @@ function readStoredAuth() {
       user: parsed?.user ?? null,
       role: typeof parsed?.role === "string" ? parsed.role : "",
       expiresAt,
+      mode: typeof parsed?.mode === "string" ? parsed.mode : "",
       notice: "",
     };
   } catch {
@@ -104,6 +126,7 @@ export function AuthProvider({ children }) {
         : null,
       role: payload?.role || "",
       expiresAt: payload?.expiresAt || "",
+      mode: payload?.mode || "",
     };
 
     setStoredAuth(nextAuth);
@@ -117,16 +140,26 @@ export function AuthProvider({ children }) {
   }, []);
 
   const login = useCallback(async (credentials) => {
+    if (!authEnabled) {
+      const response = buildDemoAuth(credentials);
+      persistAuth(response);
+      return response;
+    }
+
     const response = await loginUser(credentials);
     persistAuth(response);
     return response;
-  }, [persistAuth]);
+  }, [authEnabled, persistAuth]);
 
   const register = useCallback(async (payload) => {
+    if (!authEnabled) {
+      throw new Error("Registration is disabled in demo mode.");
+    }
+
     const response = await registerUser(payload);
     persistAuth(response);
     return response;
-  }, [persistAuth]);
+  }, [authEnabled, persistAuth]);
 
   const logout = useCallback(() => {
     persistAuth(null);
@@ -145,6 +178,7 @@ export function AuthProvider({ children }) {
       user,
       role,
       sessionNotice,
+      isDemoSession: storedAuth.mode === "demo",
       isAuthenticated: Boolean(token),
       hasAnyRole: (roles = []) => !authEnabled || roles.includes(role),
       login,
@@ -152,7 +186,7 @@ export function AuthProvider({ children }) {
       logout,
       clearSessionNotice,
     }),
-    [authEnabled, authReady, clearSessionNotice, expiresAt, login, logout, register, role, sessionNotice, token, user]
+    [authEnabled, authReady, clearSessionNotice, expiresAt, login, logout, register, role, sessionNotice, storedAuth.mode, token, user]
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

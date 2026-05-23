@@ -7,8 +7,103 @@ const SUGGESTED_PROMPTS = [
   "What should I fix first?",
 ];
 
+const SECTION_LABELS = {
+  "WHAT'S HAPPENING": "What’s Happening",
+  "WHATS HAPPENING": "What’s Happening",
+  "WHAT IS HAPPENING": "What’s Happening",
+  "WHY THIS HAPPENS": "Why This Happens",
+  "IS IT SERIOUS?": "Is It Serious?",
+  "IS IT SERIOUS": "Is It Serious?",
+  "WHAT TO DO NEXT": "Recommended Checks",
+  "RECOMMENDED CHECKS": "Recommended Checks",
+};
+
+function normalizeSectionLabel(line = "") {
+  return line
+    .replace(/^#+\s*/, "")
+    .replace(/:$/, "")
+    .trim()
+    .toUpperCase();
+}
+
+function parseAssistantSections(content = "") {
+  const lines = String(content).split("\n");
+  const sections = [];
+  let current = null;
+
+  lines.forEach((rawLine) => {
+    const line = rawLine.trim();
+    const label = SECTION_LABELS[normalizeSectionLabel(line)];
+
+    if (label) {
+      if (current) {
+        sections.push(current);
+      }
+      current = { label, lines: [] };
+      return;
+    }
+
+    if (current && line) {
+      current.lines.push(line);
+    }
+  });
+
+  if (current) {
+    sections.push(current);
+  }
+
+  return sections.length >= 2 ? sections : [];
+}
+
+function cleanAssistantLine(line = "") {
+  return line
+    .replace(/^Recommended checks:\s*/i, "")
+    .replace(/^\s*[-*]\s*/, "")
+    .trim();
+}
+
+function AssistantSection({ section }) {
+  const isChecklist = section.label === "Recommended Checks";
+  const lines = section.lines.map(cleanAssistantLine).filter(Boolean);
+
+  return (
+    <section className={`assistant-response-section${isChecklist ? " checklist" : ""}`}>
+      <div className="assistant-response-label">{section.label}</div>
+      {isChecklist ? (
+        <ul className="assistant-response-list">
+          {lines.map((line) => (
+            <li key={`${section.label}-${line}`}>{line}</li>
+          ))}
+        </ul>
+      ) : (
+        <p>{lines.join(" ") || "No detail available yet."}</p>
+      )}
+    </section>
+  );
+}
+
+function AssistantMessageContent({ content }) {
+  const sections = parseAssistantSections(content);
+
+  if (sections.length === 0) {
+    return <span>{content}</span>;
+  }
+
+  return (
+    <div className="assistant-response-card">
+      {sections.map((section) => (
+        <AssistantSection key={section.label} section={section} />
+      ))}
+    </div>
+  );
+}
+
 function ChatBubble({ role, content }) {
-  return <div className={`assistant-bubble ${role}`}>{content}</div>;
+  return (
+    <div className={`assistant-bubble ${role}`}>
+      {role === "assistant" ? <AssistantMessageContent content={content} /> : content}
+    </div>
+  );
 }
 
 function SuggestionPrompt({ label, onClick }) {

@@ -1483,9 +1483,54 @@ body {
   margin: 8px 0 0;
 }
 
+.incident-detail-list {
+  color: var(--text-soft);
+  display: grid;
+  gap: 8px;
+  line-height: 1.6;
+  margin: 10px 0 0;
+  padding-left: 20px;
+}
+
 .timeline-grid {
   display: grid;
   gap: 12px;
+}
+
+.correlation-timeline {
+  display: grid;
+  gap: 12px;
+}
+
+.correlation-timeline-item {
+  align-items: flex-start;
+  background: rgba(11, 18, 32, 0.74);
+  border: 1px solid rgba(148, 163, 184, 0.12);
+  border-radius: 16px;
+  display: grid;
+  gap: 12px;
+  grid-template-columns: 84px minmax(0, 1fr);
+  padding: 14px 16px;
+}
+
+.correlation-timeline-time {
+  color: var(--text-muted);
+  font-size: 0.86rem;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.correlation-timeline-body {
+  display: grid;
+  gap: 6px;
+}
+
+.correlation-timeline-header {
+  align-items: center;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
 }
 
 .timeline-item {
@@ -1691,6 +1736,7 @@ body {
   line-height: 1.7;
   max-width: 80%;
   padding: 14px 16px;
+  white-space: pre-wrap;
 }
 
 .assistant-bubble.user {
@@ -1703,6 +1749,54 @@ body {
   align-self: flex-start;
   background: rgba(15, 23, 42, 0.82);
   border: 1px solid rgba(148, 163, 184, 0.14);
+}
+
+.assistant-response-card {
+  display: grid;
+  gap: 10px;
+  min-width: min(560px, 100%);
+  white-space: normal;
+}
+
+.assistant-response-section {
+  background: rgba(11, 18, 32, 0.56);
+  border: 1px solid rgba(148, 163, 184, 0.12);
+  border-radius: 12px;
+  display: grid;
+  gap: 6px;
+  padding: 12px 14px;
+}
+
+.assistant-response-section.checklist {
+  border-left: 3px solid rgba(56, 189, 248, 0.62);
+}
+
+.assistant-response-label {
+  color: #bae6fd;
+  font-size: 0.72rem;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  line-height: 1.2;
+  text-transform: uppercase;
+}
+
+.assistant-response-section p {
+  color: var(--text);
+  line-height: 1.55;
+  margin: 0;
+}
+
+.assistant-response-list {
+  color: var(--text);
+  display: grid;
+  gap: 6px;
+  line-height: 1.5;
+  margin: 0;
+  padding-left: 18px;
+}
+
+.assistant-response-list li::marker {
+  color: #38bdf8;
 }
 
 .assistant-suggestions {

@@ -32,7 +32,13 @@ class AiInvestigationNotificationServiceTest {
                     "HIGH",
                     "Memory usage crossed the HIGH threshold.",
                     "Several browser/process workloads may be consuming memory.",
+                    "- Browser memory spike observed",
+                    "- Several tabs are likely contributing",
+                    "- Check Chrome Task Manager",
                     "Review top processes and close unnecessary high-memory apps.",
+                    "Elevated urgency",
+                    "Memory still appears persistent",
+                    "- Watch memory over the next few samples",
                     "MEDIUM",
                     LocalDateTime.of(2026, 5, 5, 13, 32)
             ));

@@ -33,4 +33,9 @@ public class AiInvestigationController {
     public List<AiInvestigationResponse> getByAlertId(@PathVariable String alertId) {
         return aiInvestigationQueryService.findByAlertId(alertId);
     }
+
+    @GetMapping("/incident/{incidentId}")
+    public List<AiInvestigationResponse> getByIncidentId(@PathVariable String incidentId) {
+        return aiInvestigationQueryService.findByIncidentId(incidentId);
+    }
 }

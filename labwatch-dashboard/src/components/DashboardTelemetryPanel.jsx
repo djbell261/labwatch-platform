@@ -238,8 +238,14 @@ function DashboardTelemetryPanel({ telemetryHistory = [], latestTelemetry = null
       {chartData.length < 2 ? (
         <div className="empty-state telemetry-empty-state">
           <div>
-            <div className="section-title" style={{ marginBottom: "8px" }}>Waiting for telemetry</div>
-            <div className="machine-card-subtle">Live resource trends will appear after a few more samples arrive.</div>
+            <div className="section-title" style={{ marginBottom: "8px" }}>
+              {chartData.length === 0 ? "No telemetry samples yet" : "Waiting for more telemetry"}
+            </div>
+            <div className="machine-card-subtle">
+              {chartData.length === 0
+                ? "Live resource trends will appear as soon as machines begin reporting."
+                : "Live resource trends will appear after a few more samples arrive."}
+            </div>
           </div>
         </div>
       ) : (

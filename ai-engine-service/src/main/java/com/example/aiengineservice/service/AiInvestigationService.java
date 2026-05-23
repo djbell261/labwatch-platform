@@ -4,9 +4,7 @@ import com.example.aiengineservice.ai.AiInsightRequest;
 import com.example.aiengineservice.ai.AiProvider;
 import com.example.aiengineservice.dto.AiInvestigationEvent;
 import com.example.aiengineservice.dto.AlertEventMessage;
-import com.example.aiengineservice.dto.external.ProcessMetricResponse;
 import com.example.aiengineservice.entity.AiInvestigationEntity;
-import com.example.aiengineservice.entity.Anomaly;
 import com.example.aiengineservice.kafka.AiInvestigationEventProducer;
 import com.example.aiengineservice.repository.AiInvestigationRepository;
 import io.micrometer.core.instrument.MeterRegistry;
@@ -26,7 +24,6 @@ import java.time.ZoneOffset;
 import java.util.concurrent.Executor;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.TimeUnit;
-import java.util.List;
 import java.util.Set;
 import java.util.UUID;
 
@@ -39,6 +36,12 @@ public class AiInvestigationService {
     private final AiProvider aiProvider;
     private final AiInsightRequestBuilder aiInsightRequestBuilder;
     private final AiInvestigationContextBuilder contextBuilder;
+    private final AiSignalCorrelationService correlationService;
+    private final IncidentCorrelationService incidentCorrelationService;
+    private final MachineBehaviorProfileService machineBehaviorProfileService;
+    private final RootCauseConfidenceService rootCauseConfidenceService;
+    private final AiInvestigationTriageComposer triageComposer;
+    private final KnownProcessEnrichmentService processEnrichmentService;
     private final AiInvestigationEventProducer aiInvestigationEventProducer;
     private final AiInvestigationRepository aiInvestigationRepository;
     private final Clock clock;
@@ -51,6 +54,12 @@ public class AiInvestigationService {
             AiProvider aiProvider,
             AiInsightRequestBuilder aiInsightRequestBuilder,
             AiInvestigationContextBuilder contextBuilder,
+            AiSignalCorrelationService correlationService,
+            IncidentCorrelationService incidentCorrelationService,
+            MachineBehaviorProfileService machineBehaviorProfileService,
+            RootCauseConfidenceService rootCauseConfidenceService,
+            AiInvestigationTriageComposer triageComposer,
+            KnownProcessEnrichmentService processEnrichmentService,
             AiInvestigationEventProducer aiInvestigationEventProducer,
             AiInvestigationRepository aiInvestigationRepository,
             Clock clock,
@@ -61,6 +70,12 @@ public class AiInvestigationService {
         this.aiProvider = aiProvider;
         this.aiInsightRequestBuilder = aiInsightRequestBuilder;
         this.contextBuilder = contextBuilder;
+        this.correlationService = correlationService;
+        this.incidentCorrelationService = incidentCorrelationService;
+        this.machineBehaviorProfileService = machineBehaviorProfileService;
+        this.rootCauseConfidenceService = rootCauseConfidenceService;
+        this.triageComposer = triageComposer;
+        this.processEnrichmentService = processEnrichmentService;
         this.aiInvestigationEventProducer = aiInvestigationEventProducer;
         this.aiInvestigationRepository = aiInvestigationRepository;
         this.clock = clock;
@@ -73,6 +88,8 @@ public class AiInvestigationService {
             AiProvider aiProvider,
             AiInsightRequestBuilder aiInsightRequestBuilder,
             AiInvestigationContextBuilder contextBuilder,
+            AiSignalCorrelationService correlationService,
+            AiInvestigationTriageComposer triageComposer,
             AiInvestigationEventProducer aiInvestigationEventProducer,
             AiInvestigationRepository aiInvestigationRepository,
             Clock clock
@@ -81,6 +98,40 @@ public class AiInvestigationService {
                 aiProvider,
                 aiInsightRequestBuilder,
                 contextBuilder,
+                correlationService,
+                new IncidentCorrelationService(aiInvestigationRepository, 5),
+                new MachineBehaviorProfileService(),
+                new RootCauseConfidenceService(),
+                triageComposer,
+                aiInvestigationEventProducer,
+                aiInvestigationRepository,
+                clock
+        );
+    }
+
+    AiInvestigationService(
+            AiProvider aiProvider,
+            AiInsightRequestBuilder aiInsightRequestBuilder,
+            AiInvestigationContextBuilder contextBuilder,
+            AiSignalCorrelationService correlationService,
+            IncidentCorrelationService incidentCorrelationService,
+            MachineBehaviorProfileService machineBehaviorProfileService,
+            RootCauseConfidenceService rootCauseConfidenceService,
+            AiInvestigationTriageComposer triageComposer,
+            AiInvestigationEventProducer aiInvestigationEventProducer,
+            AiInvestigationRepository aiInvestigationRepository,
+            Clock clock
+    ) {
+        this(
+                aiProvider,
+                aiInsightRequestBuilder,
+                contextBuilder,
+                correlationService,
+                incidentCorrelationService,
+                machineBehaviorProfileService,
+                rootCauseConfidenceService,
+                triageComposer,
+                new KnownProcessEnrichmentService(),
                 aiInvestigationEventProducer,
                 aiInvestigationRepository,
                 clock,
@@ -179,8 +230,24 @@ public class AiInvestigationService {
     }
 
     private AiInvestigationEvent generateInvestigation(AlertEventMessage alertEventMessage) {
+        AiInvestigationContextBuilder.AiInvestigationContext context = contextBuilder.build(alertEventMessage);
+        LocalDateTime investigationCreatedAt = LocalDateTime.ofInstant(clock.instant(), ZoneOffset.UTC);
+        java.util.List<com.example.aiengineservice.dto.CorrelationTimelineEntry> correlationTimeline =
+                withInvestigationCreatedEvent(correlationService.buildTimeline(alertEventMessage, context), alertEventMessage, investigationCreatedAt);
+        MachineBehaviorProfileService.MachineBehaviorProfile profile = machineBehaviorProfileService.build(alertEventMessage, context);
+        IncidentCorrelationService.IncidentCorrelationResult incident = incidentCorrelationService.correlate(
+                alertEventMessage,
+                context,
+                correlationTimeline
+        );
+        RootCauseConfidenceService.ConfidenceScore confidenceScore = rootCauseConfidenceService.score(
+                alertEventMessage,
+                context,
+                profile,
+                incident,
+                correlationTimeline
+        );
         try {
-            AiInvestigationContextBuilder.AiInvestigationContext context = contextBuilder.build(alertEventMessage);
             AiInsightRequest request = aiInsightRequestBuilder.buildForEvent(
                     formatCreatedAt(alertEventMessage.getCreatedAt()),
                     alertEventMessage.getAlertType(),
@@ -188,114 +255,133 @@ public class AiInvestigationService {
                     "alert-event",
                     null,
                     alertEventMessage.getMachineIdentifier()
-            );
+            ).toBuilder()
+                    .machineIdentifier(fallback(alertEventMessage.getMachineIdentifier()))
+                    .recentMetricTrend(context.recentMetricTrend())
+                    .topProcess(toTopProcessSummary(context.topProcess()))
+                    .topCpuProcess(toTopProcessSummary(context.topCpuProcess()))
+                    .topMemoryProcess(toTopProcessSummary(context.topMemoryProcess()))
+                    .correlationTimeline(correlationTimeline.stream().map(entry -> {
+                        String timestamp = entry.getTimestamp() != null
+                                ? entry.getTimestamp().toLocalTime().withNano(0).toString()
+                                : "unknown";
+                        return timestamp + " — " + entry.getType() + " — " + entry.getDescription();
+                    }).toList())
+                    .incidentGroupKey(incident.incidentGroupKey())
+                    .incidentStatus(incident.incidentStatus())
+                    .suspectedContributor(incident.suspectedContributor())
+                    .affectedMetrics(incident.affectedMetrics())
+                    .confidenceScore(confidenceScore.score())
+                    .confidenceLevel(confidenceScore.level())
+                    .baselineSummary(profile.baselineSummary())
+                    .historicalPatternNotes(profile.historicalPatternNotes())
+                    .build();
 
             String summary = aiProvider.generateInsight(request);
+            AiInvestigationTriageComposer.InvestigationTriage triage = triageComposer.compose(
+                    alertEventMessage,
+                    context,
+                    summary,
+                    correlationTimeline,
+                    profile,
+                    incident,
+                    confidenceScore
+            );
             AiInvestigationEvent aiInvestigationEvent = new AiInvestigationEvent(
                     UUID.randomUUID(),
+                    incident.incidentId(),
+                    incident.incidentGroupKey(),
+                    incident.incidentStatus(),
                     alertEventMessage.getAlertId(),
                     fallback(alertEventMessage.getMachineIdentifier()),
                     fallback(alertEventMessage.getAlertType()),
                     fallback(alertEventMessage.getSeverity()),
-                    summary,
-                    deriveLikelyCause(alertEventMessage, context),
-                    deriveRecommendedAction(alertEventMessage, context),
-                    deriveConfidence(context),
-                    LocalDateTime.ofInstant(clock.instant(), ZoneOffset.UTC)
+                    triage.summary(),
+                    triage.likelyCause(),
+                    triage.evidence(),
+                    triage.contributingFactors(),
+                    triage.recommendedChecks(),
+                    triage.recommendedActions(),
+                    triage.urgencyAssessment(),
+                    triage.persistenceAssessment(),
+                    triage.monitorNext(),
+                    incident.suspectedContributor(),
+                    incident.affectedMetrics(),
+                    confidenceScore.score(),
+                    confidenceScore.level(),
+                    confidenceScore.reasoning(),
+                    profile.baselineSummary(),
+                    profile.historicalPatternNotes(),
+                    correlationTimeline,
+                    confidenceScore.display(),
+                    investigationCreatedAt
             );
             log.info("Generated AI investigation");
             return aiInvestigationEvent;
         } catch (Exception exception) {
             log.warn("Failed to generate AI investigation, using fallback", exception);
-            return fallbackInvestigation(alertEventMessage);
+            return fallbackInvestigation(alertEventMessage, context);
         }
     }
 
-    private AiInvestigationEvent fallbackInvestigation(AlertEventMessage alertEventMessage) {
+    private AiInvestigationEvent fallbackInvestigation(
+            AlertEventMessage alertEventMessage,
+            AiInvestigationContextBuilder.AiInvestigationContext context
+    ) {
+        LocalDateTime investigationCreatedAt = LocalDateTime.ofInstant(clock.instant(), ZoneOffset.UTC);
+        java.util.List<com.example.aiengineservice.dto.CorrelationTimelineEntry> correlationTimeline =
+                withInvestigationCreatedEvent(correlationService.buildTimeline(alertEventMessage, context), alertEventMessage, investigationCreatedAt);
+        MachineBehaviorProfileService.MachineBehaviorProfile profile = machineBehaviorProfileService.build(alertEventMessage, context);
+        IncidentCorrelationService.IncidentCorrelationResult incident = incidentCorrelationService.correlate(
+                alertEventMessage,
+                context,
+                correlationTimeline
+        );
+        RootCauseConfidenceService.ConfidenceScore confidenceScore = rootCauseConfidenceService.score(
+                alertEventMessage,
+                context,
+                profile,
+                incident,
+                correlationTimeline
+        );
+        AiInvestigationTriageComposer.InvestigationTriage triage = triageComposer.compose(
+                alertEventMessage,
+                context,
+                null,
+                correlationTimeline,
+                profile,
+                incident,
+                confidenceScore
+        );
         return new AiInvestigationEvent(
                 UUID.randomUUID(),
+                incident.incidentId(),
+                incident.incidentGroupKey(),
+                incident.incidentStatus(),
                 alertEventMessage != null ? alertEventMessage.getAlertId() : null,
                 fallback(alertEventMessage != null ? alertEventMessage.getMachineIdentifier() : null),
                 fallback(alertEventMessage != null ? alertEventMessage.getAlertType() : null),
                 fallback(alertEventMessage != null ? alertEventMessage.getSeverity() : null),
-                "A HIGH/CRITICAL alert was detected for " + fallback(alertEventMessage != null
-                        ? alertEventMessage.getMachineIdentifier()
-                        : null) + ".",
-                "Insufficient AI context available to determine a precise root cause.",
-                "Open LabWatch dashboard and inspect recent telemetry/processes for this machine.",
-                "LOW",
-                LocalDateTime.ofInstant(clock.instant(), ZoneOffset.UTC)
+                triage.summary(),
+                triage.likelyCause(),
+                triage.evidence(),
+                triage.contributingFactors(),
+                triage.recommendedChecks(),
+                triage.recommendedActions(),
+                triage.urgencyAssessment(),
+                triage.persistenceAssessment(),
+                triage.monitorNext(),
+                incident.suspectedContributor(),
+                incident.affectedMetrics(),
+                confidenceScore.score(),
+                confidenceScore.level(),
+                confidenceScore.reasoning(),
+                profile.baselineSummary(),
+                profile.historicalPatternNotes(),
+                correlationTimeline,
+                confidenceScore.display(),
+                investigationCreatedAt
         );
-    }
-
-    private String deriveLikelyCause(
-            AlertEventMessage alertEventMessage,
-            AiInvestigationContextBuilder.AiInvestigationContext context
-    ) {
-        ProcessMetricResponse topProcess = context.topProcess();
-        List<Anomaly> anomalies = context.recentAnomalies();
-        String trend = context.recentMetricTrend();
-        String alertType = normalize(alertEventMessage.getAlertType());
-
-        if ("CPU".equals(alertType) && topProcess != null && topProcess.getCpuPercent() != null) {
-            return topProcess.getProcessName() + " is a leading CPU consumer, and " + trend.toLowerCase() + ".";
-        }
-
-        if ("MEMORY".equals(alertType) && topProcess != null && topProcess.getMemoryPercent() != null) {
-            return topProcess.getProcessName() + " is consuming elevated memory, and " + trend.toLowerCase() + ".";
-        }
-
-        if ("DISK".equals(alertType)) {
-            return trend + ". Storage pressure may be building from logs, downloads, or persistent artifacts.";
-        }
-
-        if (!anomalies.isEmpty()) {
-            return "Recent anomalies indicate unusual " + fallback(anomalies.get(0).getEventType()) + " behavior, and " + trend.toLowerCase() + ".";
-        }
-
-        return trend + ". The alert likely reflects sustained resource pressure on this machine.";
-    }
-
-    private String deriveRecommendedAction(
-            AlertEventMessage alertEventMessage,
-            AiInvestigationContextBuilder.AiInvestigationContext context
-    ) {
-        String alertType = normalize(alertEventMessage.getAlertType());
-        ProcessMetricResponse topProcess = context.topProcess();
-
-        if ("CPU".equals(alertType)) {
-            return topProcess != null && hasText(topProcess.getProcessName())
-                    ? "Review process " + topProcess.getProcessName() + " and check for runaway CPU-intensive work."
-                    : "Review active processes and background jobs for unexpected CPU spikes.";
-        }
-
-        if ("MEMORY".equals(alertType)) {
-            return topProcess != null && hasText(topProcess.getProcessName())
-                    ? "Review process " + topProcess.getProcessName() + " and close or restart high-memory workloads."
-                    : "Review top memory consumers and close or restart unnecessary high-memory apps.";
-        }
-
-        if ("DISK".equals(alertType)) {
-            return "Inspect disk usage growth, clear stale files or logs, and confirm free space recovers.";
-        }
-
-        return "Open LabWatch dashboard and inspect recent telemetry, anomalies, and process activity for this machine.";
-    }
-
-    private String deriveConfidence(AiInvestigationContextBuilder.AiInvestigationContext context) {
-        boolean hasTrend = context.recentMetricTrend() != null && !context.recentMetricTrend().contains("unavailable");
-        boolean hasAnomalies = context.recentAnomalies() != null && !context.recentAnomalies().isEmpty();
-        boolean hasTopProcess = context.topProcess() != null && hasText(context.topProcess().getProcessName());
-
-        if (hasTrend && (hasAnomalies || hasTopProcess)) {
-            return "HIGH";
-        }
-
-        if (hasTrend || hasAnomalies || hasTopProcess) {
-            return "MEDIUM";
-        }
-
-        return "LOW";
     }
 
     private String normalize(String value) {
@@ -314,17 +400,77 @@ public class AiInvestigationService {
         return createdAt == null ? "unknown" : createdAt.atOffset(ZoneOffset.UTC).toInstant().toString();
     }
 
+    private java.util.List<com.example.aiengineservice.dto.CorrelationTimelineEntry> withInvestigationCreatedEvent(
+            java.util.List<com.example.aiengineservice.dto.CorrelationTimelineEntry> correlationTimeline,
+            AlertEventMessage alertEventMessage,
+            LocalDateTime investigationCreatedAt
+    ) {
+        java.util.List<com.example.aiengineservice.dto.CorrelationTimelineEntry> events =
+                new java.util.ArrayList<>(correlationTimeline != null ? correlationTimeline : java.util.List.of());
+        events.add(new com.example.aiengineservice.dto.CorrelationTimelineEntry(
+                investigationCreatedAt,
+                fallback(alertEventMessage != null ? alertEventMessage.getMachineIdentifier() : null),
+                "INVESTIGATION_CREATED",
+                fallback(alertEventMessage != null ? alertEventMessage.getAlertType() : null),
+                alertEventMessage != null ? alertEventMessage.getMetricValue() : null,
+                "AI investigation generated for this incident",
+                "ai-investigation"
+        ));
+        events.sort(java.util.Comparator.comparing(com.example.aiengineservice.dto.CorrelationTimelineEntry::getTimestamp));
+        return events;
+    }
+
+    private AiInsightRequest.TopProcessSummary toTopProcessSummary(
+            com.example.aiengineservice.dto.external.ProcessMetricResponse processMetricResponse
+    ) {
+        AiInsightRequest.TopProcessSummary.TopProcessSummaryBuilder builder = AiInsightRequest.TopProcessSummary.builder()
+                .name(processMetricResponse != null && hasText(processMetricResponse.getProcessName())
+                        ? processMetricResponse.getProcessName()
+                        : "unknown")
+                .cpu(processMetricResponse != null ? processMetricResponse.getCpuPercent() : 0.0)
+                .memory(processMetricResponse != null ? processMetricResponse.getMemoryPercent() : 0.0);
+
+        if (processMetricResponse != null) {
+            processEnrichmentService.enrich(processMetricResponse.getProcessName())
+                    .ifPresent(insight -> builder
+                            .category(insight.category())
+                            .humanExplanation(insight.humanExplanation())
+                            .likelyCauses(insight.likelyCauses())
+                            .operatorAdvice(insight.operatorAdvice())
+                            .beginnerFriendly(insight.beginnerFriendly()));
+        }
+
+        return builder.build();
+    }
+
     private AiInvestigationEntity toEntity(AiInvestigationEvent aiInvestigationEvent) {
         return new AiInvestigationEntity(
                 null,
                 aiInvestigationEvent.getInvestigationId() != null ? aiInvestigationEvent.getInvestigationId().toString() : null,
+                fallback(aiInvestigationEvent.getIncidentId()),
+                fallback(aiInvestigationEvent.getIncidentGroupKey()),
+                fallback(aiInvestigationEvent.getIncidentStatus()),
                 aiInvestigationEvent.getAlertId() != null ? String.valueOf(aiInvestigationEvent.getAlertId()) : "unknown",
                 fallback(aiInvestigationEvent.getMachineIdentifier()),
                 fallback(aiInvestigationEvent.getAlertType()),
                 fallback(aiInvestigationEvent.getSeverity()),
                 fallback(aiInvestigationEvent.getSummary()),
                 fallback(aiInvestigationEvent.getLikelyCause()),
+                fallback(aiInvestigationEvent.getEvidence()),
+                fallback(aiInvestigationEvent.getContributingFactors()),
+                fallback(aiInvestigationEvent.getRecommendedChecks()),
                 fallback(aiInvestigationEvent.getRecommendedAction()),
+                fallback(aiInvestigationEvent.getUrgencyAssessment()),
+                fallback(aiInvestigationEvent.getPersistenceAssessment()),
+                fallback(aiInvestigationEvent.getMonitorNext()),
+                fallback(aiInvestigationEvent.getSuspectedContributor()),
+                fallback(aiInvestigationEvent.getAffectedMetrics()),
+                aiInvestigationEvent.getConfidenceScore() != null ? aiInvestigationEvent.getConfidenceScore() : 0,
+                fallback(aiInvestigationEvent.getConfidenceLevel()),
+                fallback(aiInvestigationEvent.getConfidenceReasoning()),
+                fallback(aiInvestigationEvent.getBaselineSummary()),
+                fallback(aiInvestigationEvent.getHistoricalPatternNotes()),
+                aiInvestigationEvent.getCorrelationTimeline() != null ? aiInvestigationEvent.getCorrelationTimeline() : java.util.List.of(),
                 fallback(aiInvestigationEvent.getConfidence()),
                 aiInvestigationEvent.getCreatedAt() != null
                         ? aiInvestigationEvent.getCreatedAt()
