@@ -1,8 +1,16 @@
 # LabWatch Platform
 
+## System Architecture
+
+![LabWatch Architecture](docs/images/labwatch-architecture.png)
+
 LabWatch is a distributed monitoring platform that simulates a real infrastructure alerting workflow. It collects machine telemetry, publishes health events through Kafka, detects threshold alerts and statistical anomalies, groups related incidents, and surfaces operational context through a React dashboard.
 
 The project is structured as a recruiter/demo-friendly microservice system: easy to run locally with Docker Compose, but with production-shaped concerns such as Flyway migrations, optional JWT auth, agent tokens, Kafka retry/dead-letter topics, Redis-backed cooldowns, Prometheus metrics, and notification channels.
+
+## Why LabWatch?
+
+I built LabWatch to better understand how modern backend systems monitor infrastructure, process telemetry, and automate incident response. Rather than focusing on CRUD functionality, the project explores event-driven microservices, observability, anomaly detection, and production-inspired system design.
 
 ## What It Does
 
