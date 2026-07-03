@@ -1,259 +1,350 @@
 # LabWatch Platform
 
-**LabWatch Platform** is a distributed, event-driven monitoring system designed to simulate real-world infrastructure alerting workflows.
+LabWatch is a distributed monitoring platform that simulates a real infrastructure alerting workflow. It collects machine telemetry, publishes health events through Kafka, detects threshold alerts and statistical anomalies, groups related incidents, and surfaces operational context through a React dashboard.
 
-It ingests machine telemetry, processes events asynchronously using Kafka, and manages alert lifecycle state using a microservice architecture.
+The project is structured as a recruiter/demo-friendly microservice system: easy to run locally with Docker Compose, but with production-shaped concerns such as Flyway migrations, optional JWT auth, agent tokens, Kafka retry/dead-letter topics, Redis-backed cooldowns, Prometheus metrics, and notification channels.
 
----
+## What It Does
 
-## Key Highlights
+- Ingests host telemetry from a Python agent or direct REST calls
+- Registers agents and machines before telemetry ingestion
+- Publishes health events to Kafka for asynchronous processing
+- Creates, deduplicates, and resolves alerts from threshold rules
+- Builds rolling behavior baselines and detects z-score anomalies
+- Promotes anomalies into alert/incident workflows with cooldown control
+- Generates AI investigation context using mock, OpenAI, or Bedrock providers
+- Dispatches console/email notifications for alert and investigation events
+- Displays machines, telemetry, alerts, incidents, anomalies, and chat-assisted investigation flows in a React dashboard
+- Exposes Prometheus metrics for backend services
 
-- Event-driven architecture using Kafka
-- Microservices built with Spring Boot
-- Real-time alert processing pipeline
-- Alert deduplication and lifecycle management
-- Dockerized system for consistent deployment
-- PostgreSQL-backed persistence layer
+## Architecture
 
----
+```text
+Python agent or demo seed script
+        |
+        v
+monitoring-api
+  - agent registration
+  - telemetry ingestion
+  - machine/account ownership
+  - WebSocket updates
+        |
+        v
+Kafka: health-events
+        |
+        +--------------------+
+        |                    |
+        v                    v
+alert-engine          ai-engine-service
+  - threshold rules     - rolling baselines
+  - alert lifecycle     - anomaly detection
+  - alert-events        - AI investigation context
+        |                    |
+        +---------+----------+
+                  v
+          notification-service
+          - console/email delivery
+          - Redis cooldowns
 
-## System Architecture
-Client / Agent
-↓
-monitoring-api (REST ingestion)
-↓
-Kafka (health-events topic)
-↓
-alert-engine (async processing)
-↓
-ai-engine-service (anomaly detection)
-↓
-PostgreSQL (alerts + events)
-
-
----
+PostgreSQL stores machines, agents, telemetry, alerts, anomalies, and investigations.
+Redis supports cooldown state. Prometheus and Grafana provide local observability.
+```
 
 ## Services
 
-### monitoring-api
-- Registers machines/agents before telemetry ingestion
-- Receives telemetry via REST (`POST /api/v1/telemetry/snapshots`)
-- Optionally validates `X-Agent-Token` on ingestion
-- Publishes events to Kafka topic (`health-events`)
+| Component | Purpose | Default URL |
+| --- | --- | --- |
+| `monitoring-api` | REST API for auth, agents, machines, telemetry, and WebSocket updates | http://localhost:8089 |
+| `alert-engine` | Kafka consumer that creates/resolves threshold alerts | http://localhost:8088 |
+| `ai-engine-service` | Anomaly detection, incident correlation, AI insights, and chat APIs | http://localhost:8090 |
+| `notification-service` | Consumes alert/investigation events and dispatches notifications | http://localhost:8091 |
+| `labwatch-dashboard` | React/Vite frontend for the operator experience | http://localhost:5173 |
+| `labwatch-agent` | Python telemetry collector for a local host | n/a |
+| PostgreSQL | Shared local persistence | localhost:5435 |
+| Kafka | Event backbone | localhost:9092 |
+| Redis | Cooldown/state store | localhost:6379 |
+| Prometheus | Metrics scraping | http://localhost:9091 |
+| Grafana | Metrics dashboards | http://localhost:3001 |
 
-### alert-engine
-- Consumes Kafka events asynchronously
-- Applies threshold-based alert logic
-- Prevents duplicate ACTIVE alerts
-- Transitions alerts from ACTIVE → RESOLVED
-- Persists alerts in PostgreSQL
+## Tech Stack
 
-### ai-engine-service
-- Consumes Kafka `health-events`
-- Maintains rolling baselines per machine + metric type
-- Detects anomalies with rolling average, standard deviation, and z-score
-- Publishes anomaly messages to Kafka topic `anomaly-events`
-- Persists detected anomalies in PostgreSQL
-- Exposes REST API at `GET /api/anomalies`
+- Java 17, Spring Boot, Spring Security, Spring Data JPA, Spring WebSocket
+- Apache Kafka and Spring Kafka
+- PostgreSQL with Flyway migrations
+- Redis for cooldown and coordination state
+- React, Vite, React Router, Recharts, Axios, STOMP/SockJS
+- Python host agent using `psutil`
+- Docker Compose, Prometheus, Grafana
+- Maven, npm, pytest-compatible Python project layout
 
-### Multi-Device Foundation
-- Agents can register through `POST /api/v1/agents/register`
-- `monitoring-api` now tracks machines and agent records separately
-- Agent auth can be enabled with `LABWATCH_AGENT_AUTH_ENABLED=true`
-- Dashboard can switch between multiple reported machines while keeping the single-machine view intact
+## Repository Layout
 
-### Account + Ownership Foundation
-- Users can register and login through `POST /api/v1/auth/register` and `POST /api/v1/auth/login`
-- JWT auth is optional and disabled by default for local development
-- Machines can remain unowned for backward compatibility, then be claimed later by a user
-- Claimed machines are filtered to their owner when auth is enabled
+```text
+.
+|-- monitoring-api/          # telemetry ingestion, auth, agents, machines, websocket
+|-- alert-engine/            # threshold alert processing and alert lifecycle
+|-- ai-engine-service/       # anomaly detection, incidents, AI investigation APIs
+|-- notification-service/    # alert/investigation notification consumer
+|-- labwatch-dashboard/      # React operator dashboard
+|-- labwatch-agent/          # Python host telemetry agent
+|-- docs/                    # deployment, profiles, and stability notes
+|-- scripts/                 # demo telemetry helpers
+|-- docker-compose.yml       # local platform stack
+|-- prometheus.yml           # local metrics scrape config
+|-- .env.example             # local Compose defaults
+`-- .env.production.example  # production-oriented environment template
+```
 
----
+## Prerequisites
 
-## Core Features
-
-### Event-Driven Processing
-Decoupled services using Kafka to enable scalability and fault tolerance.
-
-### Alert Deduplication
-Prevents alert spam by ensuring only one ACTIVE alert exists per machine + alert type.
-
-### Alert Lifecycle Management
-Alerts automatically transition:
-ACTIVE → RESOLVED
-
-
-Each alert includes:
-- `createdAt`
-- `resolvedAt`
-
-### Threshold-Based Detection
-Supports CPU, Memory, and Disk thresholds.
-
-### Statistical Anomaly Detection
-Uses a rolling window with configurable minimum samples and z-score threshold to flag outlier telemetry values.
-
----
-
-## Running the System (Docker)
-
-### Prerequisites
 - Docker Desktop
+- Java 17, if running services outside Docker
+- Node.js and npm, if running the dashboard locally
+- Python 3, if running the local host agent
 
-### Run everything
+## Quick Start
+
+Start the backend platform:
 
 ```bash
+cp .env.example .env
 docker compose up --build -d
 ```
 
-### Seed demo telemetry
+Check health:
+
+```bash
+curl http://localhost:8089/actuator/health
+curl http://localhost:8088/actuator/health
+curl http://localhost:8090/actuator/health
+curl http://localhost:8091/actuator/health
+```
+
+Seed demo telemetry:
 
 ```bash
 ./scripts/seed-demo-telemetry.sh
 ```
 
+Start the dashboard:
+
+```bash
+cd labwatch-dashboard
+npm install
+npm run dev
+```
+
+Open http://localhost:5173.
+
+## Running the Agent
+
+The Python agent collects local CPU, memory, disk, uptime, host, and process metrics, then posts telemetry snapshots to `monitoring-api`.
+
+```bash
+cd labwatch-agent
+python3 -m venv .venv
+source .venv/bin/activate
+pip install -r requirements.txt
+cp .env.example .env
+python -m agent --once
+```
+
+Run continuously:
+
+```bash
+python -m agent
+```
+
+More details are in [labwatch-agent/README.md](labwatch-agent/README.md).
+
+## Dashboard Configuration
+
+The dashboard defaults to the local backend URLs:
+
+```env
+VITE_MONITORING_API_URL=http://localhost:8089
+VITE_ALERT_ENGINE_URL=http://localhost:8088
+VITE_AI_ENGINE_URL=http://localhost:8090
+VITE_NOTIFICATION_SERVICE_URL=http://localhost:8091
+```
+
+To override them:
+
+```bash
+cd labwatch-dashboard
+cp .env.example .env.local
+```
+
+More details are in [labwatch-dashboard/README.md](labwatch-dashboard/README.md).
+
+## API Examples
+
+Register an agent:
+
+```bash
+curl -sS -X POST http://localhost:8089/api/v1/agents/register \
+  -H "Content-Type: application/json" \
+  -d '{
+    "machineIdentifier": "lab-pc-01",
+    "hostname": "lab-pc-01.local",
+    "osType": "Darwin",
+    "osVersion": "23.5.0",
+    "agentVersion": "1.0.0"
+  }'
+```
+
+Send a telemetry snapshot:
+
+```bash
+curl -sS -X POST http://localhost:8089/api/v1/telemetry/snapshots \
+  -H "Content-Type: application/json" \
+  -d '{
+    "machineIdentifier": "lab-pc-01",
+    "hostname": "lab-pc-01.local",
+    "osType": "Darwin",
+    "osVersion": "23.5.0",
+    "uptimeSeconds": 86400,
+    "timestamp": "2026-07-03T12:00:00Z",
+    "cpuUsage": 94.0,
+    "memoryUsage": 82.0,
+    "diskUsage": 41.0,
+    "source": "manual-demo",
+    "processMetrics": [
+      {
+        "processName": "java",
+        "cpuPercent": 56.0,
+        "memoryPercent": 22.0
+      }
+    ]
+  }'
+```
+
+Common endpoints:
+
+| Endpoint | Description |
+| --- | --- |
+| `POST /api/v1/auth/register` | Create a user account |
+| `POST /api/v1/auth/login` | Login and receive a JWT |
+| `POST /api/v1/agents/register` | Register a telemetry agent |
+| `POST /api/v1/telemetry/snapshots` | Ingest telemetry |
+| `GET /api/v1/machines` | List machines |
+| `POST /api/v1/machines/{machineIdentifier}/claim` | Claim an unowned machine |
+| `GET /api/alerts` | List alerts |
+| `GET /api/anomalies` | List anomalies |
+| `POST /api/chat` | Ask the AI investigation assistant |
+
+When `LABWATCH_AGENT_AUTH_ENABLED=true`, telemetry requests should include `X-Agent-Token`. When `LABWATCH_AUTH_ENABLED=true`, protected user workflows require `Authorization: Bearer <jwt>`.
+
 ## Runtime Profiles
 
-- Profile guide: [docs/ENVIRONMENT_PROFILES.md](/Users/derwinbell/dev/ResumeProjects/labwatch-platform/docs/ENVIRONMENT_PROFILES.md)
-- Local/demo Compose startup defaults to `LABWATCH_SPRING_PROFILE=demo`
-- Persistent-schema services now use Flyway migrations with `ddl-auto=validate`
+`docker compose` defaults to:
 
-## Services
-
-| Service        | URL                                            |
-| -------------- | ---------------------------------------------- |
-| monitoring-api | [http://localhost:8089](http://localhost:8089) |
-| alert-engine   | [http://localhost:8088](http://localhost:8088) |
-| ai-engine-service | [http://localhost:8090](http://localhost:8090) |
-
-## API Usage
-### Register Agent
-
-`POST /api/v1/agents/register`
-
-```json
-{
-  "machineIdentifier": "lab-pc-01",
-  "hostname": "lab-pc-01.local",
-  "osType": "Darwin",
-  "osVersion": "23.5.0",
-  "agentVersion": "1.0.0"
-}
+```env
+LABWATCH_SPRING_PROFILE=demo
 ```
 
-### Send Telemetry Snapshot
+Profile summary:
 
-`POST /api/v1/telemetry/snapshots`
+| Profile | Use case |
+| --- | --- |
+| `local` | Developer-friendly defaults and local diagnostics |
+| `demo` | Auth-off demo mode with mock AI provider |
+| `staging` | Migration-driven startup, auth-on posture |
+| `prod` | Production-oriented safety defaults |
 
-Include `X-Agent-Token` when agent auth is enabled.
+Examples:
 
-### List Machines
-
-`GET /api/v1/machines`
-
-### Register Account
-
-`POST /api/v1/auth/register`
-
-```json
-{
-  "email": "user@example.com",
-  "password": "password123",
-  "displayName": "Derwin"
-}
+```bash
+LABWATCH_SPRING_PROFILE=local docker compose up --build
+LABWATCH_SPRING_PROFILE=staging LABWATCH_AUTH_ENABLED=true docker compose up --build
 ```
 
-### Login
+See [docs/ENVIRONMENT_PROFILES.md](docs/ENVIRONMENT_PROFILES.md) for the full profile guide.
 
-`POST /api/v1/auth/login`
+## Auth and AI Modes
 
-### Claim Machine
+Local demo defaults:
 
-`POST /api/v1/machines/{machineIdentifier}/claim`
+```env
+LABWATCH_AUTH_ENABLED=false
+LABWATCH_AGENT_AUTH_ENABLED=false
+AI_PROVIDER=mock
+```
 
-Requires `Authorization: Bearer <jwt>`.
+Auth-enabled local run:
 
-### Get Alerts
+```bash
+LABWATCH_AUTH_ENABLED=true \
+LABWATCH_AGENT_AUTH_ENABLED=true \
+JWT_SECRET=replace-with-a-long-random-secret \
+docker compose up --build
+```
 
-`GET /api/alerts`
+OpenAI-backed investigations:
 
-## Example Flow
+```bash
+AI_PROVIDER=openai \
+OPENAI_API_KEY=your-api-key \
+OPENAI_MODEL=gpt-4.1-mini \
+docker compose up --build
+```
 
-- Machine sends event → monitoring-api
-- Event stored + published to Kafka
-- alert-engine consumes event
-- ai-engine-service evaluates the same event stream for anomalies
-- Alert created if threshold exceeded
-- Anomaly published to `anomaly-events` when z-score exceeds the configured threshold
-- Alert resolved when metric normalizes
+For deployment-oriented environment values, start from [.env.production.example](.env.production.example).
 
-## Tech Stack
+## Testing
 
-- Java
-- Spring Boot
-- Spring Data JPA (Hibernate)
-- PostgreSQL
-- Apache Kafka
-- Docker + Docker Compose
-- Maven
+Run backend tests from each Spring service:
 
-## Roadmap
-- Alert severity levels (INFO / WARNING / CRITICAL)
-- Multi-user account ownership for machines
-- Observability (metrics + logging)
-- Cloud deployment (AWS)
+```bash
+cd monitoring-api && ./mvnw test
+cd ../alert-engine && ./mvnw test
+cd ../ai-engine-service && mvn test
+cd ../notification-service && mvn test
+```
 
-## Deployment Readiness
+Run dashboard checks:
 
-- Deployment and demo environment notes: [docs/DEPLOYMENT_READINESS.md](/Users/derwinbell/dev/ResumeProjects/labwatch-platform/docs/DEPLOYMENT_READINESS.md)
-- Backend stability runbook: [docs/STABILITY_TESTING.md](/Users/derwinbell/dev/ResumeProjects/labwatch-platform/docs/STABILITY_TESTING.md)
+```bash
+cd labwatch-dashboard
+npm install
+npm run lint
+npm run build
+```
 
-### Local demo mode
+## Observability
 
-- `LABWATCH_AUTH_ENABLED=false`
-- `AI_PROVIDER=mock`
-- Landing page still shows auth/product entry points
-- Dashboard remains directly accessible for recruiter demos
+Backend services expose:
 
-### Auth-enabled MVP mode
+```text
+/actuator/health
+/actuator/prometheus
+```
 
-- `LABWATCH_AUTH_ENABLED=true`
-- JWT auth is active
-- first registered user becomes `ADMIN`
-- later users default to `OPERATOR`
+Prometheus is configured in [prometheus.yml](prometheus.yml) and is available at http://localhost:9091 when the Compose stack is running. Grafana is available at http://localhost:3001.
 
-## Auth Modes
+## Useful Commands
 
-### Local dev default
-- `LABWATCH_AUTH_ENABLED=false`
-- `LABWATCH_AGENT_AUTH_ENABLED=false`
-- Dashboard works without login
-- Existing unowned machines remain visible
+```bash
+# Start everything in the background
+docker compose up --build -d
 
-### Enable lightweight auth
-- Set `LABWATCH_AUTH_ENABLED=true`
-- Set `JWT_SECRET` to a non-default value
-- Optionally set `JWT_EXPIRATION_MINUTES`
-- Register/login in the dashboard, then claim unowned machines from the machine sidebar
+# Follow logs for one service
+docker compose logs -f monitoring-api
 
-## Migration Notes
+# Stop services but keep volumes
+docker compose down
 
-- `monitoring-api`, `alert-engine`, and `ai-engine-service` now use Flyway migrations.
-- Each service keeps a dedicated Flyway history table because the platform shares one PostgreSQL database.
-- Existing databases can transition safely with `baseline-on-migrate=true`.
-- Fresh environments are created from versioned SQL migration files instead of `ddl-auto=update`.
-- Existing `machine` rows remain valid because ownership is nullable.
-- Existing machines will show as unowned until a logged-in user claims them.
+# Stop services and remove local persisted data
+docker compose down -v
 
+# Re-seed demo telemetry
+./scripts/seed-demo-telemetry.sh
+```
 
+## Additional Docs
 
-## This project demonstrates:
-- Distributed system design
-- Event-driven architecture with Kafka
-- Microservice communication patterns
-- Backend system scalability concepts
-- Real-world alert lifecycle handling
-- DevOps fundamentals with Docker
-
-## Author
-Derwin Bell
+- [docs/ENVIRONMENT_PROFILES.md](docs/ENVIRONMENT_PROFILES.md)
+- [docs/DEPLOYMENT_READINESS.md](docs/DEPLOYMENT_READINESS.md)
+- [docs/STABILITY_TESTING.md](docs/STABILITY_TESTING.md)
+- [labwatch-agent/README.md](labwatch-agent/README.md)
+- [labwatch-dashboard/README.md](labwatch-dashboard/README.md)
